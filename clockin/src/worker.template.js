@@ -611,7 +611,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     return json({ ok: true });
   }
   if (p === '/employees/update' && M === 'POST') {
-    const max = [1, 2, 3].includes(Number(b.max_devices)) ? Number(b.max_devices) : null;
+    const max = [1, 2, 3, 20].includes(Number(b.max_devices)) ? Number(b.max_devices) : null;
     await DB.prepare('UPDATE employees SET site_id = ?, active = ?, max_devices = COALESCE(?, max_devices) WHERE id = ?').bind(b.site_id || null, b.active ? 1 : 0, max, b.id).run();
     return json({ ok: true });
   }

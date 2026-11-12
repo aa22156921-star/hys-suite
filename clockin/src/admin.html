@@ -667,7 +667,7 @@
         td(tr, el('span', !e.active ? '停用' : e.bound ? '已綁定' : '未綁定', 'tag ' + (!e.active ? 't-pending' : e.bound ? 't-ok' : 't-late')));
         if (e.self) { tr.lastChild.appendChild(document.createTextNode(' ')); tr.lastChild.appendChild(el('span', '自行登記', 'tag t-late')); }
         var dv = el('span'); dv.appendChild(document.createTextNode((e.deviceKinds.join('、') || '—') + '　上限 '));
-        var mx = el('select'); [1, 2, 3].forEach(function (n) { var o = el('option', n + ' 台'); o.value = n; mx.appendChild(o); }); mx.value = e.max_devices || 2;
+        var mx = el('select'); [1, 2, 3, 20].forEach(function (n) { var o = el('option', n === 20 ? '不限（管理員測試）' : n + ' 台'); o.value = n; mx.appendChild(o); }); mx.value = e.max_devices || 2;
         mx.style.padding = '4px'; mx.onchange = function () { api('/employees/update', { id: e.id, site_id: e.site_id, active: e.active, max_devices: +mx.value }).then(loaders.emp); };
         dv.appendChild(mx); td(tr, dv);
         td(tr, e.bound_at ? new Date(Date.parse(e.bound_at) + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '');
