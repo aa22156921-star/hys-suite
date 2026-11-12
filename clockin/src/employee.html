@@ -133,6 +133,7 @@
     <div class="card" id="apprCard" style="display:none"><h2>待我核准 <span id="apprN"></span></h2><div id="apprList"></div></div>
     <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button></div>
     <div class="row2"><button id="btnOut">外出申報</button></div>
+    <div class="row2" id="bossRow" style="display:none"><button id="btnBoss">主管查詢</button></div>
     <div class="card" id="shiftCard">
       <h2>我的班</h2>
       <div id="shifts"></div>
@@ -161,6 +162,17 @@
   </section>
 
   <!-- 請假 -->
+  <section class="view" id="vBoss">
+    <button class="link" data-back style="width:auto">← 返回</button>
+    <h1 class="big">主管查詢</h1>
+    <div class="row2"><input type="date" id="bDate" class="fin"><button id="bLoad">查詢</button></div>
+    <div class="muted" id="bSum" style="margin:6px 0 10px;font-size:15px"></div>
+    <input id="bQ" class="fin" placeholder="搜尋姓名、案場" style="margin-bottom:10px">
+    <div class="card"><h2>需注意（未到班・遲到・不在案場）</h2><div id="bItems"></div></div>
+    <div class="card"><h2>幹部・機動 最後位置</h2><div id="bTrack"></div></div>
+    <p class="muted">查詢紀錄會留存。立即定位只在對方上班時段有效。</p>
+  </section>
+
   <section class="view" id="vOut">
     <button class="link" data-back style="width:auto">← 返回</button>
     <h1 class="big">外出申報</h1>
@@ -210,7 +222,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function tw(ms) { var t = new Date(ms + 8 * 3600e3); return { d: t.getUTCFullYear() + '/' + pad(t.getUTCMonth() + 1) + '/' + pad(t.getUTCDate()),
     md: (t.getUTCMonth() + 1) + '/' + t.getUTCDate(), w: '日一二三四五六'.charAt(t.getUTCDay()), hm: pad(t.getUTCHours()) + ':' + pad(t.getUTCMinutes()), s: pad(t.getUTCSeconds()) }; }
-  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave', 'vOut'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
+  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave', 'vOut', 'vBoss'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
 
 
   function api(path, opt) {
@@ -276,7 +288,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
 
   function enterMain() {
-    show('vMain'); $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
+    show('vMain'); $('bossRow').style.display = me.viewer ? '' : 'none'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
     var box = $('shifts'); box.innerHTML = '';
     $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
     me.upcoming.forEach(function (s) {
@@ -408,6 +420,42 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
       $('oMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
     }).catch(function () { $('oGo').disabled = false; $('oMsg').className = 'msg big err'; $('oMsg').textContent = '網路錯誤，請再按一次'; });
   };
+
+  var BOSS = null;
+  function bossRender() {
+    if (!BOSS) return;
+    var q = $('bQ').value.trim(), hit = function (t) { return !q || t.indexOf(q) >= 0; };
+    var bi = $('bItems'); bi.innerHTML = '';
+    var items = BOSS.items.filter(function (it) { return hit(it.name + (it.site || '') + (it.empNo || '')); });
+    if (!items.length) bi.appendChild(el('div', q ? '找不到' : '目前沒有異常 ✓', 'muted'));
+    items.forEach(function (it) {
+      var d = el('div', '', 'shift'); var l = el('span'); l.appendChild(el('b', it.name + (it.empNo ? ' ' + it.empNo : '')));
+      l.appendChild(document.createTextNode('　' + (it.site || '') + '　' + (it.shift || '') + (it.date !== BOSS.date ? '（' + it.date.slice(5) + '）' : '')));
+      var r = el('span', it.what); r.style.color = it.level === 'red' ? 'var(--bad)' : 'var(--warn)'; r.style.fontWeight = '700';
+      d.appendChild(l); d.appendChild(r); bi.appendChild(d);
+    });
+    var bt = $('bTrack'); bt.innerHTML = '';
+    var tr = BOSS.tracked.filter(function (t) { return hit(t.name + (t.dept || '') + (t.emp_no || '') + (t.last && t.last.at || '')); });
+    if (!tr.length) bt.appendChild(el('div', '沒有資料', 'muted'));
+    tr.forEach(function (t) {
+      var d = el('div', '', 'shift'); var l = el('span'); l.appendChild(el('b', t.name + (t.emp_no ? ' ' + t.emp_no : '')));
+      l.appendChild(document.createTextNode('　' + (t.title || '') + '　' + (t.last ? t.last.when + ' ' + (t.last.at || '非案場') : (t.app ? '還沒有定位' : '未裝 App'))));
+      d.appendChild(l);
+      var r = el('span');
+      if (t.last) { var a = el('a', '地圖'); a.href = 'https://www.google.com/maps?q=' + t.last.lat + ',' + t.last.lng; a.target = '_blank'; r.appendChild(a); }
+      if (t.can_locate) { var b = el('button', '立即定位'); b.style.cssText = 'margin-left:8px;padding:4px 8px;font-size:14px;width:auto'; b.onclick = function () { b.disabled = true; api('/api/boss', { method: 'POST', body: JSON.stringify({ id: t.id }) }).then(function (x) { b.textContent = x.error ? x.error : '已要求 ✓'; }); }; r.appendChild(b); }
+      d.appendChild(r); bt.appendChild(d);
+    });
+  }
+  function bossLoad() {
+    $('bSum').textContent = '載入中…';
+    api('/api/boss?date=' + $('bDate').value).then(function (d) {
+      if (d.error) { $('bSum').textContent = d.error; return; }
+      BOSS = d; $('bSum').textContent = '排班 ' + d.summary.scheduled + ' 人・已到班 ' + d.summary.arrived + ' 人・需注意 ' + d.items.length + ' 筆'; bossRender();
+    }).catch(function () { $('bSum').textContent = '網路錯誤'; });
+  }
+  $('btnBoss').onclick = function () { $('bDate').value = new Date(now() + 8 * 3600e3).toISOString().slice(0, 10); show('vBoss'); window.scrollTo(0, 0); bossLoad(); };
+  $('bLoad').onclick = bossLoad; $('bQ').oninput = bossRender;
 
   var busy = false, lastRun = 0;
   function record() {

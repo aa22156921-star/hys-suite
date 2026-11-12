@@ -70,6 +70,7 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN nueip_uid TEXT').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN nueip_dept TEXT').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE dept_map ADD COLUMN leader_uid TEXT').run(); } catch (e) { /* 已存在 */ }
+  try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN viewer INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* 已存在 */ }
   schemaReady = true;
 }
 
@@ -186,7 +187,7 @@ function deviceToken(req) {
 }
 async function currentEmployee(req, env) {
   const t = deviceToken(req); if (!t) return null;
-  return env.DB.prepare('SELECT e.id, e.name, e.site_id, e.active, e.auto_ping, e.locate_req, e.roam, e.nueip_uid, e.nueip_dept, e.emp_no FROM devices d JOIN employees e ON e.id = d.emp_id WHERE d.device_hash = ?').bind(await sha256(t)).first();
+  return env.DB.prepare('SELECT e.id, e.name, e.site_id, e.active, e.auto_ping, e.locate_req, e.roam, e.nueip_uid, e.nueip_dept, e.emp_no, e.viewer FROM devices d JOIN employees e ON e.id = d.emp_id WHERE d.device_hash = ?').bind(await sha256(t)).first();
 }
 const cookieHeader = (t) => `${COOKIE}=${t}; Path=/; Max-Age=315360000; HttpOnly; Secure; SameSite=Lax`;
 
@@ -371,6 +372,37 @@ async function apiRequestCancel(req, env) {
   return json({ ok: true });
 }
 
+// 主管查詢帳號：手機上看今日未到班／遲到／不在案場、幹部・機動最後位置，可要求立即定位
+async function apiBoss(req, env, url) {
+  const emp = await currentEmployee(req, env);
+  if (!emp || !emp.active || !emp.viewer) return json({ error: '沒有主管查詢權限' }, 403);
+  const DB = env.DB;
+  if (req.method === 'POST') { // 立即定位
+    const b = await body(req); if (!b) return json({ error: '資料格式錯誤' }, 400);
+    const e = await DB.prepare('SELECT id, name, auto_ping FROM employees WHERE id = ?').bind(b.id).first();
+    if (!e || !e.auto_ping) return json({ error: '這個人沒有開啟定位追蹤' }, 400);
+    if (!(await trackState(env, e, Date.now())).inWin) return json({ error: '他現在不是上班時段，不能要求定位' }, 400);
+    await DB.prepare('UPDATE employees SET locate_req = ? WHERE id = ?').bind(Date.now(), e.id).run();
+    await audit(env, emp.name + '（主管查詢）', '要求立即定位', e.name);
+    return json({ ok: true });
+  }
+  const date = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : twDate(Date.now());
+  const x = await exceptionsData(env, date);
+  const sites = await activeSites(env), now = Date.now();
+  const { results } = await DB.prepare(`SELECT e.id, e.name, e.emp_no, e.auto_ping, s.title, s.dept_name,
+      (SELECT COUNT(*) FROM devices d WHERE d.emp_id = e.id AND (d.ua LIKE '%ClockinApp%' OR d.ua = 'iPhone 捷徑')) AS app
+    FROM employees e LEFT JOIN staff s ON s.uid = e.nueip_uid WHERE e.active = 1 AND e.auto_ping IS NOT NULL ORDER BY s.dept_name, e.name`).all();
+  const tracked = [];
+  for (const e of results) {
+    const p = await DB.prepare('SELECT ms, lat, lng FROM pings WHERE emp_id = ? AND lat IS NOT NULL ORDER BY ms DESC LIMIT 1').bind(e.id).first();
+    const m = p ? matchSite(sites, p.lat, p.lng) : null;
+    tracked.push({ id: e.id, name: e.name, emp_no: e.emp_no, title: e.title, dept: e.dept_name, app: e.app > 0, can_locate: (await trackState(env, e, now)).inWin,
+      last: p ? { when: twClock(p.ms) + (twDate(p.ms) === twDate(now) ? '' : '（' + twDate(p.ms).slice(5) + '）'), at: m && m.at ? m.at.name : (m && m.nearest ? '近 ' + m.nearest.name + ' ' + m.nearest.dist + 'm' : ''), lat: p.lat, lng: p.lng } : null });
+  }
+  await audit(env, emp.name + '（主管查詢）', '查看主管查詢', date);
+  return json({ date, summary: x.summary, items: x.items, tracked });
+}
+
 async function apiApprove(req, env) {
   const emp = await currentEmployee(req, env); if (!emp || !emp.active) return json({ error: '請先綁定' }, 401);
   const b = await body(req) || {};
@@ -406,7 +438,7 @@ async function apiMe(req, env) {
       await applyTrackRules(env.DB);
     }
   }
-  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', canOut: true, now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
+  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', canOut: true, viewer: !!emp.viewer, now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
 }
 
 // 把名冊的員編／NUEIP 帳號補進已建立、但還沒對上的員工（姓名在名冊裡唯一才自動對）
@@ -622,38 +654,45 @@ async function apiAdmin(req, env, url) {
   return res;
 }
 const ADMIN_ACTION = { '/sites': '修改工地', '/sites/bulk': '批次匯入工地', '/sites/delete': '刪除工地', '/employees': '新增員工', '/staff/merge': '名冊對應員工', '/employees/update': '修改員工',
-  '/employees/unbind': '解除綁定', '/employees/empno': '修改員編', '/employees/auto': '修改定時定位', '/employees/roam': '修改外勤', '/employees/locate': '要求立即定位',
+  '/employees/unbind': '解除綁定', '/employees/empno': '修改員編', '/employees/auto': '修改定時定位', '/employees/roam': '修改外勤', '/employees/viewer': '修改主管查詢', '/employees/locate': '要求立即定位',
   '/employees/shortcut': '產生捷徑代碼', '/shifts': '修改班別', '/schedule': '匯入班表', '/apk': '上架 App', '/apk/pull': '上架整合版 App', '/requests/reopen': '系統退回改回待審' };
+
+// 今日異常（後台與主管查詢共用）：沒到班、遲到、不在案場、缺下班卡、外出不符、待核准
+async function exceptionsData(env, date) {
+  const DB = env.DB;
+  const { report } = await buildReport(env, addDays(date, -1), date);
+  const items = [];
+  for (const r of report) {
+    const add = (level, what) => items.push({ level, what, date: r.date, name: r.name, empNo: r.empNo, shift: r.shift, start: r.start, end: r.end, site: r.site, leave: r.leave });
+    if (r.inStatus === 'missing' && r.outStatus === 'missing') add('red', '未到班');
+    else {
+      if (r.inStatus === 'missing') add('red', '上班未打卡');
+      if (r.inStatus === 'late') add('amber', '遲到 ' + (r.in && r.in.lateMin || '') + ' 分');
+      if (r.in && r.in.inRange === false) add('amber', '上班不在案場（' + (r.in.at || '無對應地點') + '）');
+      if (r.outStatus === 'missing') add('amber', '下班未打卡');
+      if (r.out && r.out.inRange === false) add('amber', '下班不在案場（' + (r.out.at || '無對應地點') + '）');
+    }
+  }
+  const pend = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.status = 'pending' ORDER BY r.id`).all()).results;
+  // 外出申報 vs 定位不符
+  const outs = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.kind = 'out' AND r.status IN ('pending', 'approved') AND r.date BETWEEN ? AND ?`).bind(addDays(date, -1), date).all()).results;
+  for (const o of await decorate(env, outs)) if (o.check && o.check.level === 'bad')
+    items.push({ level: 'red', what: '外出不符：' + o.check.text, date: o.date, name: o.name, empNo: o.emp_no, shift: '外出 ' + o.time + '–' + o.time_to, site: o.leave_type });
+  const noNo = (await DB.prepare("SELECT name FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id)").all()).results.map((x) => x.name);
+  const noSite = (await DB.prepare(`SELECT dept_name FROM dept_map WHERE mode = 'none' ORDER BY dept_name`).all()).results.map((x) => x.dept_name);
+  const sched = report.filter((r) => r.date === date).length, arrived = report.filter((r) => r.date === date && (r.inStatus === 'ok' || r.inStatus === 'late')).length;
+  const dupNo = (await DB.prepare("SELECT UPPER(emp_no) AS no, GROUP_CONCAT(name, '、') AS names FROM employees WHERE active = 1 AND emp_no IS NOT NULL AND emp_no <> '' GROUP BY UPPER(emp_no) HAVING COUNT(*) > 1").all()).results.map((x) => x.no + '（' + x.names + '）');
+  const sameName = (await DB.prepare("SELECT e.name, GROUP_CONCAT(s.emp_no, '、') AS nos FROM employees e JOIN staff s ON s.name = e.name AND s.active = 1 WHERE e.active = 1 AND e.nueip_uid IS NULL GROUP BY e.id HAVING COUNT(*) > 1").all()).results.map((x) => x.name + '（名冊有 ' + x.nos + '）');
+  return ({ date, items, pending: await decorate(env, pend), noEmpNo: noNo, dupNo, sameName, noSiteDepts: noSite, summary: { scheduled: sched, arrived } });
+}
 
 async function adminRoutes(req, env, url, p, M, DB, b) {
   // 今日異常：沒到班、遲到、不在案場、缺下班卡、待核准申請
   if (p === '/exceptions' && M === 'GET') {
     const date = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : twDate(Date.now());
-    const { report } = await buildReport(env, addDays(date, -1), date);
-    const items = [];
-    for (const r of report) {
-      const add = (level, what) => items.push({ level, what, date: r.date, name: r.name, empNo: r.empNo, shift: r.shift, start: r.start, end: r.end, site: r.site, leave: r.leave });
-      if (r.inStatus === 'missing' && r.outStatus === 'missing') add('red', '未到班');
-      else {
-        if (r.inStatus === 'missing') add('red', '上班未打卡');
-        if (r.inStatus === 'late') add('amber', '遲到 ' + (r.in && r.in.lateMin || '') + ' 分');
-        if (r.in && r.in.inRange === false) add('amber', '上班不在案場（' + (r.in.at || '無對應地點') + '）');
-        if (r.outStatus === 'missing') add('amber', '下班未打卡');
-        if (r.out && r.out.inRange === false) add('amber', '下班不在案場（' + (r.out.at || '無對應地點') + '）');
-      }
-    }
-    const pend = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.status = 'pending' ORDER BY r.id`).all()).results;
-    // 外出申報 vs 定位不符
-    const outs = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.kind = 'out' AND r.status IN ('pending', 'approved') AND r.date BETWEEN ? AND ?`).bind(addDays(date, -1), date).all()).results;
-    for (const o of await decorate(env, outs)) if (o.check && o.check.level === 'bad')
-      items.push({ level: 'red', what: '外出不符：' + o.check.text, date: o.date, name: o.name, empNo: o.emp_no, shift: '外出 ' + o.time + '–' + o.time_to, site: o.leave_type });
-    const noNo = (await DB.prepare("SELECT name FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id)").all()).results.map((x) => x.name);
-    const noSite = (await DB.prepare(`SELECT dept_name FROM dept_map WHERE mode = 'none' ORDER BY dept_name`).all()).results.map((x) => x.dept_name);
-    const sched = report.filter((r) => r.date === date).length, arrived = report.filter((r) => r.date === date && (r.inStatus === 'ok' || r.inStatus === 'late')).length;
-    const dupNo = (await DB.prepare("SELECT UPPER(emp_no) AS no, GROUP_CONCAT(name, '、') AS names FROM employees WHERE active = 1 AND emp_no IS NOT NULL AND emp_no <> '' GROUP BY UPPER(emp_no) HAVING COUNT(*) > 1").all()).results.map((x) => x.no + '（' + x.names + '）');
-    const sameName = (await DB.prepare("SELECT e.name, GROUP_CONCAT(s.emp_no, '、') AS nos FROM employees e JOIN staff s ON s.name = e.name AND s.active = 1 WHERE e.active = 1 AND e.nueip_uid IS NULL GROUP BY e.id HAVING COUNT(*) > 1").all()).results.map((x) => x.name + '（名冊有 ' + x.nos + '）');
-    return json({ date, items, pending: await decorate(env, pend), noEmpNo: noNo, dupNo, sameName, noSiteDepts: noSite, summary: { scheduled: sched, arrived } });
+    return json(await exceptionsData(env, date));
   }
+
   // 申請一覽與核准
   if (p === '/requests' && M === 'GET') {
     const st = url.searchParams.get('status') || 'pending';
@@ -716,7 +755,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
   // 員工
   if (p === '/employees' && M === 'GET') {
     await mergeRoster(DB);
-    const { results } = await DB.prepare(`SELECT e.id, e.name, e.emp_no, e.nueip_uid, (SELECT title FROM staff WHERE uid = e.nueip_uid) AS title, (SELECT dept_name FROM staff WHERE uid = e.nueip_uid) AS dept_name, e.auto_ping, e.roam, e.site_id, s.name AS site, e.active, e.created_at, e.bound_at, e.consent_at, e.max_devices,
+    const { results } = await DB.prepare(`SELECT e.id, e.name, e.emp_no, e.viewer, e.nueip_uid, (SELECT title FROM staff WHERE uid = e.nueip_uid) AS title, (SELECT dept_name FROM staff WHERE uid = e.nueip_uid) AS dept_name, e.auto_ping, e.roam, e.site_id, s.name AS site, e.active, e.created_at, e.bound_at, e.consent_at, e.max_devices,
       (SELECT COUNT(*) FROM devices WHERE emp_id = e.id) AS devices,
       (SELECT GROUP_CONCAT(ua, '||') FROM devices WHERE emp_id = e.id) AS uas,
       (SELECT MAX(ms) FROM pings WHERE emp_id = e.id) AS last_ms FROM employees e LEFT JOIN sites s ON s.id = e.site_id ORDER BY e.active DESC, e.name`).all();
@@ -745,6 +784,10 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const st = no ? await DB.prepare('SELECT uid, dept_id, name FROM staff WHERE emp_no = ? COLLATE NOCASE AND active = 1').bind(no).first() : null;
     if (st) await DB.prepare('UPDATE employees SET nueip_uid = ?, nueip_dept = COALESCE(?, nueip_dept) WHERE id = ?').bind(st.uid, st.dept_id, b.id).run();
     return json({ ok: true, matched: st ? st.name : null });
+  }
+  if (p === '/employees/viewer' && M === 'POST') { // 主管查詢帳號（同時免比對案場）
+    await DB.prepare('UPDATE employees SET viewer = ?, roam = CASE WHEN ? = 1 THEN 1 ELSE roam END WHERE id = ?').bind(b.viewer ? 1 : 0, b.viewer ? 1 : 0, b.id).run();
+    return json({ ok: true });
   }
   if (p === '/employees/roam' && M === 'POST') { // 幹部／機動：不比對案場
     await DB.prepare('UPDATE employees SET roam = ? WHERE id = ?').bind(b.roam ? 1 : 0, b.id).run();
@@ -1048,6 +1091,7 @@ export default {
       if (p === '/api/request' && M === 'POST') return apiRequest(req, env);
       if (p === '/api/request/cancel' && M === 'POST') return apiRequestCancel(req, env);
       if (p === '/api/approve' && M === 'POST') return apiApprove(req, env);
+      if (p === '/api/boss') return apiBoss(req, env, url);
       if (p.startsWith('/api/admin/')) return apiAdmin(req, env, url);
       return json({ error: 'Not found' }, 404);
     } catch (e) {
