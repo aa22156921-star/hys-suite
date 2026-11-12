@@ -223,7 +223,7 @@
         <div class="row" style="margin-bottom:8px"><label>安卓 App（.apk）<input type="file" id="apkFile" accept=".apk"></label><button id="apkUp">上架 App</button> <button id="apkPull" title="舊網址的打卡 App 也會自動升級成整合版">上架 GitHub 最新整合版</button><span class="muted" id="apkMsg"></span></div>
         <p class="muted" style="margin-top:0">把網址傳給員工，員工輸入自己的姓名就會和手機綁定。「自行登記」＝名字不在你建立的名單裡，請確認是否打錯字或不是員工。每人預設最多綁 2 台裝置（例如手機＋電腦）。換手機時按「解除綁定」會清除全部裝置。<br>「幹部定時定位」：填 <code>1-5 09:00,12:00,18:00</code> ＝週一到五這三個時間自動定位一次（需安裝安卓 App；iPhone 網頁版只能打開時記錄）。<br>「外勤」打勾＝幹部、督導、機動人員：不比對案場，只記時間與實際位置。有填定時定位的人也自動視為外勤。</p>
         <div class="scroll"><table>
-          <thead><tr><th>姓名</th><th>NUEIP 員編</th><th>幹部定時定位</th><th>外勤</th><th>主管查詢</th><th>預設工地</th><th>狀態</th><th>裝置</th><th>綁定時間</th><th>最後定位</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>NUEIP 員編</th><th>幹部定時定位</th><th>外勤</th><th>考勤查核</th><th>預設工地</th><th>狀態</th><th>裝置</th><th>綁定時間</th><th>最後定位</th><th></th></tr></thead>
           <tbody id="eRows"></tbody>
         </table></div>
       </div>
@@ -734,7 +734,7 @@
         var rm = el('input'); rm.type = 'checkbox'; rm.checked = !!e.roam; rm.title = '幹部、督導、機動：不比對案場，只記時間與位置';
         rm.onchange = function () { api('/employees/roam', { id: e.id, roam: rm.checked }).catch(function (x) { alert(x.message || x); rm.checked = !rm.checked; }); };
         td(tr, rm);
-        var vw = el('input'); vw.type = 'checkbox'; vw.checked = !!e.viewer; vw.title = '主管查詢帳號：手機上可查未到班、各案場人員、幹部機動位置；本人打卡不比對案場';
+        var vw = el('input'); vw.type = 'checkbox'; vw.checked = !!e.viewer; vw.title = '考勤查核帳號：手機上可查未到班、各案場人員、幹部機動位置；本人打卡不比對案場';
         vw.onchange = function () { api('/employees/viewer', { id: e.id, viewer: vw.checked }).catch(function (x) { alert(x.message || x); vw.checked = !vw.checked; }); };
         td(tr, vw);
         var ss = siteSelect(e.site_id); ss.onchange = function () { api('/employees/update', { id: e.id, site_id: +ss.value || null, active: e.active, max_devices: e.max_devices }).then(loaders.emp); }; td(tr, ss);

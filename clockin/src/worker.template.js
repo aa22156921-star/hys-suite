@@ -415,7 +415,7 @@ async function apiRequestCancel(req, env) {
 // 主管查詢帳號：手機上看今日未到班／遲到／不在案場、幹部・機動最後位置，可要求立即定位
 async function apiBoss(req, env, url) {
   const emp = await currentEmployee(req, env);
-  if (!emp || !emp.active || !emp.viewer) return json({ error: '沒有主管查詢權限' }, 403);
+  if (!emp || !emp.active || !emp.viewer) return json({ error: '沒有考勤查核權限' }, 403);
   const DB = env.DB;
   if (req.method === 'POST') { // 立即定位
     const b = await body(req); if (!b) return json({ error: '資料格式錯誤' }, 400);
@@ -423,7 +423,7 @@ async function apiBoss(req, env, url) {
     if (!e) return json({ error: '找不到這個人' }, 404);
     if (!(await trackState(env, e, Date.now())).inWin) return json({ error: '他現在不是上班時段，不能要求定位' }, 400);
     await DB.prepare('UPDATE employees SET locate_req = ? WHERE id = ?').bind(Date.now(), e.id).run();
-    await audit(env, emp.name + '（主管查詢）', '要求立即定位', e.name);
+    await audit(env, emp.name + '（考勤查核）', '要求立即定位', e.name);
     return json({ ok: true });
   }
   const date = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : twDate(Date.now());
@@ -439,7 +439,7 @@ async function apiBoss(req, env, url) {
     tracked.push({ id: e.id, name: e.name, emp_no: e.emp_no, title: e.title, dept: e.dept_name, app: e.app > 0, can_locate: (await trackState(env, e, now)).inWin,
       last: p ? { when: twClock(p.ms) + (twDate(p.ms) === twDate(now) ? '' : '（' + twDate(p.ms).slice(5) + '）'), at: m && m.at ? m.at.name : (m && m.nearest ? '近 ' + m.nearest.name + ' ' + m.nearest.dist + 'm' : ''), lat: p.lat, lng: p.lng } : null });
   }
-  await audit(env, emp.name + '（主管查詢）', '查看主管查詢', date);
+  await audit(env, emp.name + '（考勤查核）', '查看考勤查核', date);
   return json({ date, summary: x.summary, items: x.items, tracked });
 }
 
