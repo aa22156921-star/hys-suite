@@ -132,7 +132,8 @@
     <button class="main" id="btnRetry" style="margin-bottom:14px">重新打卡</button>
     <div class="card" id="apprCard" style="display:none"><h2>待我核准 <span id="apprN"></span></h2><div id="apprList"></div></div>
     <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button></div>
-    <div class="row2"><button id="btnOut">外出申報</button><button id="btnBoss" style="visibility:hidden">考勤查核</button></div>
+    <div class="row2"><button id="btnOut">外出申報</button><button id="btnPay">薪資查詢</button></div>
+    <div class="row2" id="bossRow" style="display:none"><button id="btnBoss">考勤查核</button><button style="visibility:hidden" tabindex="-1" aria-hidden="true">　</button></div>
     <div class="card" id="shiftCard">
       <h2>我的班</h2>
       <div id="shifts"></div>
@@ -140,7 +141,6 @@
     <div class="card" id="myCard" style="display:none"><h2>我的申請</h2><div id="myList"></div></div>
     <div class="card muted" id="permHelp" style="display:none">請到手機設定開啟這個網站的定位權限</div>
     <div class="paynote">
-      <a href="/pay">薪資查詢 ›</a>
       <div>薪資依出勤紀錄核算，實際金額以管理處核算完成後發布的當月薪資條為準。請每班確實打卡；出勤紀錄不實，將影響薪資計算。</div>
     </div>
   </section>
@@ -170,6 +170,15 @@
     <div class="card"><h2>需注意（未到班・遲到・不在案場）</h2><div id="bItems"></div></div>
     <div class="card"><h2>幹部・機動 最後位置</h2><div id="bTrack"></div></div>
     <p class="muted">查詢紀錄會留存。立即定位只在對方上班時段有效。</p>
+  </section>
+
+  <section class="view" id="vPay">
+    <button class="link" data-back style="width:auto">← 返回</button>
+    <h1 class="big">薪資查詢</h1>
+    <span class="lbl">月份</span><select id="pMonth" class="fin"></select>
+    <button class="main" id="pGo" style="margin-top:18px;font-size:21px;padding:18px">查詢</button>
+    <p style="margin:12px 0 0;font-size:15px;color:var(--warn)">目前僅提供 10 月薪資查詢。若有其他月份需求，請洽詢公司。</p>
+    <p class="muted">進入後輸入姓名與身分證後 4 碼查詢。實際金額以管理處核算完成後發布的當月薪資條為準。</p>
   </section>
 
   <section class="view" id="vOut">
@@ -221,7 +230,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function tw(ms) { var t = new Date(ms + 8 * 3600e3); return { d: t.getUTCFullYear() + '/' + pad(t.getUTCMonth() + 1) + '/' + pad(t.getUTCDate()),
     md: (t.getUTCMonth() + 1) + '/' + t.getUTCDate(), w: '日一二三四五六'.charAt(t.getUTCDay()), hm: pad(t.getUTCHours()) + ':' + pad(t.getUTCMinutes()), s: pad(t.getUTCSeconds()) }; }
-  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave', 'vOut', 'vBoss'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
+  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave', 'vOut', 'vBoss', 'vPay'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
 
 
   function api(path, opt) {
@@ -287,7 +296,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
 
   function enterMain() {
-    show('vMain'); $('btnBoss').style.visibility = me.viewer ? 'visible' : 'hidden'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
+    show('vMain'); $('bossRow').style.display = me.viewer ? 'flex' : 'none'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
     var box = $('shifts'); box.innerHTML = '';
     $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
     me.upcoming.forEach(function (s) {
@@ -420,6 +429,16 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
       $('oMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
     }).catch(function () { $('oGo').disabled = false; $('oMsg').className = 'msg big err'; $('oMsg').textContent = '網路錯誤，請再按一次'; });
   };
+
+  // 薪資查詢：目前只有 115 年 10 月，之後每月加一行
+  var PAY_MONTHS = [{ v: '2026-10', t: '115 年 10 月' }];
+  var PAY_URL = '/pay';
+  $('btnPay').onclick = function () {
+    var sel = $('pMonth'); sel.innerHTML = '';
+    PAY_MONTHS.forEach(function (m) { var o = el('option', m.t); o.value = m.v; sel.appendChild(o); });
+    show('vPay'); window.scrollTo(0, 0);
+  };
+  $('pGo').onclick = function () { location.href = PAY_URL; };
 
   var BOSS = null;
   function bossRender() {
