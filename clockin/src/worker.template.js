@@ -266,7 +266,7 @@ const SCREEN_PROMPT = `你是保全物業公司出勤系統的「補卡理由」
 - absurd：明顯不可能是真的、或跟出勤無關（例如被外星人抓走、亂打的字、只有符號或表情、開玩笑）。reply 客氣但明確：說明這個理由無法作為補卡依據，請附上實際原因重新申請。
 - abusive：辱罵、嘲諷、挑釁、威脅主管或公司。reply 冷靜、專業、不帶情緒：申請已退回、內容已留存紀錄，請遵守公司工作規則與職場禮儀；若內容是辱罵或威脅特定的人，可提醒此類言論可能涉及法律責任，但不要恐嚇、不要斷定他犯罪。
 reply 用繁體中文，60 字以內，不要加引號以外的符號。`;
-const OUT_PROMPT = `你是保全物業公司出勤系統的「外出申報」審核助手。申報人是勤務主管、督導或機動人員，上班時間外出要先申報。只回一個 JSON：{"verdict":"ok|absurd|abusive","reply":"給申報人看的話"}
+const OUT_PROMPT = `你是保全物業公司出勤系統的「外出申報」審核助手。申報人是保全或物業員工（含勤務主管、督導、機動），上班時間離開崗位外出要先申報。只回一個 JSON：{"verdict":"ok|absurd|abusive","reply":"給申報人看的話"}
 - ok：和工作有關、說得通就算（巡查案場、拜訪管委會或客戶、處理客訴、支援其他案場、送公文、到銀行／公所／郵局辦公司事務、採購工作用品、開會、教育訓練、維修會勘）。時間長度大致合理即可。拿不準就選 ok 交給主管。reply 留空。
 - absurd：理由不合邏輯或明顯是私事（例如上班時間去逛街、看電影、接小孩、辦私人事情卻申報公出、事由與地點完全對不上、時間長得不合理例如巡一個案場要 8 小時）。reply 客氣但明確：指出哪裡對不上；私事請改請假。不要故意刁難。
 - abusive：辱罵、嘲諷、挑釁。reply 冷靜專業：申報已退回、內容已留存紀錄，請遵守工作規則與職場禮儀；若辱罵或威脅特定的人，可提醒可能涉及法律責任，但不要恐嚇、不要斷定犯罪。
@@ -344,7 +344,6 @@ async function apiRequest(req, env) {
     await DB.prepare(`INSERT INTO requests (emp_id, kind, date, date_to, time, time_to, leave_type, reason, lat, lng, acc, created_ms) VALUES (?, 'leave', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(emp.id, b.date, to, t1, t2, type, reason || null, ...loc, Date.now()).run();
   } else if (b.kind === 'out') {
-    if (!emp.roam && !emp.auto_ping) return json({ error: '外出申報限勤務主管、督導、機動人員使用' }, 403);
     if (!DATE_RE.test(b.date || '') || b.date < addDays(today, -1) || b.date > addDays(today, 7)) return json({ error: '外出申報只能填昨天到 7 天內' }, 400);
     if (!TIME_RE.test(b.time || '') || !TIME_RE.test(b.time_to || '') || b.time_to <= b.time) return json({ error: '請選正確的外出時段' }, 400);
     const place = String(b.place || '').trim().slice(0, 40); if (place.length < 2) return json({ error: '請填要去哪裡' }, 400);
@@ -407,7 +406,7 @@ async function apiMe(req, env) {
       await applyTrackRules(env.DB);
     }
   }
-  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', canOut: !!(emp.roam || emp.auto_ping), now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
+  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', canOut: true, now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
 }
 
 // 把名冊的員編／NUEIP 帳號補進已建立、但還沒對上的員工（姓名在名冊裡唯一才自動對）
@@ -887,6 +886,13 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
 
   // NUEIP 打卡檔（給公司電腦的 NueAttendance 自動上傳用）
   // ?date=班表日期（預設昨天）&fmt={no},{date},{time}&dfmt=yyyy/MM/dd&all=1（連範圍外也匯出）
+  if (p === '/nueip-forms' && M === 'GET') { // 已核准的請假、外出：NUEIP 不能用程式寫入，整理成清單給人資登錄
+    const from = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : twDate(Date.now());
+    const to = DATE_RE.test(url.searchParams.get('to') || '') ? url.searchParams.get('to') : from;
+    const rows = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.kind IN ('leave', 'out') AND r.status = 'approved'
+      AND r.date <= ? AND COALESCE(r.date_to, r.date) >= ? ORDER BY r.date, e.name`).bind(to, from).all()).results;
+    return json({ rows: await decorate(env, rows) });
+  }
   if (p === '/nueip' && M === 'GET') {
     const date = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : addDays(twDate(Date.now()), -1);
     const fmt = (url.searchParams.get('fmt') || '{no},{date},{time}').slice(0, 200);
@@ -894,7 +900,8 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const all = url.searchParams.get('all') === '1';
     const io = { in: url.searchParams.get('in') || '上班', out: url.searchParams.get('out') || '下班' };
     const nl = url.searchParams.get('crlf') === '0' ? '\n' : '\r\n';
-    const { report } = await buildReport(env, date, date);
+    const to = DATE_RE.test(url.searchParams.get('to') || '') && url.searchParams.get('to') >= date && url.searchParams.get('to') <= addDays(date, 31) ? url.searchParams.get('to') : date;
+    const { report } = await buildReport(env, date, to);
     const lines = [], skipped = [];
     const fd = (ms) => { const t = new Date(ms + TZ_OFFSET).toISOString(); return dfmt.replace('yyyy', t.slice(0, 4)).replace('MM', t.slice(5, 7)).replace('dd', t.slice(8, 10)); };
     const ft = (ms) => new Date(ms + TZ_OFFSET).toISOString().slice(11, 16);

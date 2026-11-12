@@ -153,6 +153,17 @@
         <button class="primary" id="rNue">匯出 NUEIP 檔</button>
       </div></div>
       <div class="card">
+        <h2 style="margin-top:0">匯入人易（NUEIP）</h2>
+        <ol class="muted" style="margin:0 0 10px;padding-left:20px;line-height:1.8">
+          <li>選上面的起日、迄日（一次最多 31 天），按「① 下載打卡匯入檔」，得到 TXT。核准的補卡已算進去；不在案場範圍、沒有員編的人不會匯出，會列在下方。</li>
+          <li>到人易後台的<b>打卡資料匯入</b>，選這個 TXT 上傳。檔案每行是：員編,日期 時間,1（上班）或 2（下班）,地點。人易的匯入格式要先設定成同樣的欄位順序（只要設一次）。</li>
+          <li>按「② 下載請假・外出清單」：人易不能用程式寫入請假，這份是已核准的請假和外出，給人資在人易補登或核對。</li>
+        </ol>
+        <div class="row"><button class="primary" id="nTxt">① 下載打卡匯入檔</button><button id="nForms">② 下載請假・外出清單</button>
+          <label style="font-size:13px"><input type="checkbox" id="nAll"> 不在案場的也匯出</label><span class="muted" id="nMsg"></span></div>
+        <div class="muted" id="nSkip" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
         <div class="stats" id="rStats"></div>
         <div class="scroll"><table>
           <thead><tr><th>日期</th><th>姓名</th><th>班別</th><th>工地</th><th>上班</th><th>上班位置</th><th>下班</th><th>下班位置</th></tr></thead>
@@ -561,6 +572,33 @@
       var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '出勤');
       XLSX.writeFile(wb, '洪英出勤_' + $('rFrom').value + '_' + $('rTo').value + '.xlsx');
     }).catch(function (e) { alert(e.message); });
+  };
+
+  // ---------- 匯入人易：打卡 TXT、請假外出清單 ----------
+  $('nTxt').onclick = function () {
+    var f = $('rFrom').value, t = $('rTo').value || f; if (!f) { alert('先選起日'); return; }
+    $('nMsg').textContent = '產生中…'; $('nSkip').textContent = '';
+    var q = '/nueip?date=' + f + '&to=' + t + '&fmt=' + encodeURIComponent('{no},{date} {sec},{io},{site}') + '&dfmt=yyyy-MM-dd&in=1&out=2' + ($('nAll').checked ? '&all=1' : '');
+    fetch('/api/admin' + q, { headers: { 'X-Admin-Key': KEY } }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var n = r.headers.get('X-Count'), sk = decodeURIComponent(r.headers.get('X-Skipped') || '');
+      return r.blob().then(function (b) {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = '人易打卡匯入_' + f + (t !== f ? '_' + t : '') + '.txt'; a.click();
+        $('nMsg').textContent = '已下載 ' + n + ' 筆'; $('nSkip').textContent = sk ? '沒有匯出：' + sk : '';
+      });
+    }).catch(function (e) { $('nMsg').textContent = e.message; });
+  };
+  $('nForms').onclick = function () {
+    var f = $('rFrom').value, t = $('rTo').value || f; if (!f) { alert('先選起日'); return; }
+    api('/nueip-forms?date=' + f + '&to=' + t).then(function (d) {
+      var rows = [['類別', '員工編號', '姓名', '假別／外出地點', '起日', '迄日', '起時', '迄時', '原因', '核准人', '核准時間', '定位比對']];
+      d.rows.forEach(function (r) { rows.push([r.kindName, r.emp_no || '', r.name, r.leave_type || '', r.date, r.date_to || r.date, r.time || '全天', r.time_to || '', r.reason || '', r.decided_by || '', r.decided || '', r.check ? r.check.text : '']); });
+      return loadXLSX().then(function () {
+        var ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '請假外出');
+        XLSX.writeFile(wb, '人易補登_請假外出_' + f + (t !== f ? '_' + t : '') + '.xlsx');
+        $('nMsg').textContent = '請假・外出 ' + d.rows.length + ' 筆';
+      });
+    }).catch(function (e) { $('nMsg').textContent = e.message; });
   };
 
   // ---------- 班表格子 ----------
