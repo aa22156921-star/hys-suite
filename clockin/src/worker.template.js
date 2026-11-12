@@ -756,7 +756,20 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const synced = results.reduce((m, r) => Math.max(m, r.synced_ms || 0), 0);
     const unmatched = (await DB.prepare("SELECT id, name, emp_no, bound_at FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id) ORDER BY bound_at DESC").all()).results;
     const dupNo = (await DB.prepare("SELECT UPPER(emp_no) AS no, GROUP_CONCAT(name, '、') AS names FROM employees WHERE active = 1 AND emp_no IS NOT NULL AND emp_no <> '' GROUP BY UPPER(emp_no) HAVING COUNT(*) > 1").all()).results;
-    return json({ staff: results, unmatched, dupNo, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
+    // 人事掃描建檔（hr-scan-db，繫結名稱 HR）：依姓名對上名冊；只取狀態與檔案數，不帶身分證等個資
+    let hrOn = false, hrOnly = [];
+    if (env.HR) {
+      try {
+        const hr = (await env.HR.prepare(`SELECT e.id, e.name, e.status, e.dept_name, e.title, e.hire_date, e.created_at,
+            (SELECT COUNT(*) FROM files f WHERE f.employee_id = e.id) AS files FROM employees e ORDER BY e.id DESC`).all()).results;
+        const byName = {}; for (const h of hr) if (!byName[h.name]) byName[h.name] = h;
+        const names = new Set(results.map((r) => r.name));
+        for (const r of results) { const h = byName[r.name]; if (h) r.hr = { status: h.status, files: h.files }; }
+        hrOnly = hr.filter((h) => !names.has(h.name)).map((h) => ({ name: h.name, status: h.status, dept_name: h.dept_name, title: h.title, hire_date: h.hire_date, created: (h.created_at || '').slice(0, 10), files: h.files }));
+        hrOn = true;
+      } catch (e) { hrOn = false; }
+    }
+    return json({ staff: results, unmatched, dupNo, hrOn, hrOnly, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
   }
   if (p === '/staff/merge' && M === 'POST') return json({ ok: true, merged: await mergeRoster(DB) });
   if (p === '/audit' && M === 'GET') {

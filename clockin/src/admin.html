@@ -93,6 +93,7 @@
       <button data-t="sched">班表</button>
       <button data-t="emp">員工</button>
       <button data-t="staff">人事名冊</button>
+      <button data-t="hr">人事建檔</button>
       <button data-t="shift">班別</button>
       <button data-t="site">工地</button>
       <button data-t="ping">定位紀錄</button>
@@ -133,7 +134,16 @@
       <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待處理員編（沒有員編、對不到名冊、或員編重複）</h2>
         <p class="muted" style="margin:0 0 8px">請到人易新增或確認此人的員工編號，再到「員工」分頁填上員編，系統就會自動對上。</p>
         <div class="scroll"><table><thead><tr><th>姓名</th><th>目前員編</th><th>綁定日</th></tr></thead><tbody id="stUnmatched"></tbody></table></div></div>
-      <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
+      <div class="card" id="stHrWrap" style="display:none;border-color:#0f766e"><h2 style="margin-top:0">已建檔、人易尚無（請到人易新增）</h2>
+        <p class="muted" style="margin:0 0 8px">人事建檔裡有、但人易名冊還沒有的人，多半是新進人員。到人易新增後，隔天早上同步就會自動對上。</p>
+        <div class="scroll"><table><thead><tr><th>姓名</th><th>派駐社區</th><th>職位</th><th>到職日</th><th>建檔狀態</th><th>建檔日</th></tr></thead><tbody id="stHrOnly"></tbody></table></div></div>
+      <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th><th>人事建檔</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
+    </section>
+
+    <section class="sec" id="s-hr">
+      <div class="card"><div class="row"><b style="margin-right:auto">人事掃描建檔</b><a id="hrOpen" target="_blank" rel="noopener">另開視窗 ↗</a></div>
+        <p class="muted" style="margin:6px 0 0">拍身分證、到職單建檔。用人事建檔的通行碼登入。建好的人會在「人事名冊」顯示建檔狀態；人易還沒有的新人，會列在名冊頁「已建檔、人易尚無」提醒你去人易新增。</p></div>
+      <iframe id="hrFrame" style="width:100%;height:78vh;border:0;border-radius:12px;background:#fff" allow="camera; clipboard-write" referrerpolicy="no-referrer"></iframe>
     </section>
 
     <section class="sec" id="s-audit">
@@ -367,7 +377,7 @@
   var loaders = {};
   function tab(t) {
     Array.prototype.forEach.call($('tabs').children, function (b) { b.className = b.dataset.t === t ? 'on' : ''; });
-    ['today', 'req', 'report', 'sched', 'emp', 'staff', 'shift', 'site', 'ping', 'app', 'audit'].forEach(function (s) { $('s-' + s).style.display = s === t ? 'block' : 'none'; });
+    ['today', 'req', 'report', 'sched', 'emp', 'staff', 'hr', 'shift', 'site', 'ping', 'app', 'audit'].forEach(function (s) { $('s-' + s).style.display = s === t ? 'block' : 'none'; });
     if (loaders[t]) loaders[t]();
   }
   Array.prototype.forEach.call($('tabs').children, function (b) { b.onclick = function () { tab(b.dataset.t); }; });
@@ -459,16 +469,20 @@
     list.slice(0, 600).forEach(function (r) {
       var tr = el('tr'); td(tr, r.emp_no); td(tr, r.name); td(tr, r.dept_name || ''); td(tr, r.title || ''); td(tr, r.arrive || '');
       td(tr, el('span', r.devices > 0 ? '已綁定' : r.emp_id ? '已建立未綁定' : '未加入', 'tag ' + (r.devices > 0 ? 't-ok' : r.emp_id ? 't-late' : 't-pending')));
+      td(tr, r.hr ? el('span', HRST[r.hr.status] + (r.hr.files ? '・📎' + r.hr.files : ''), 'tag t-ok') : (HRON ? el('span', '未建檔', 'tag t-pending') : '—'));
       tb.appendChild(tr);
     });
-    if (!list.length) { var tr = el('tr'); var c = td(tr, STAFF.length ? '找不到' : '名冊還是空的，等每天早上同步'); c.colSpan = 6; c.className = 'muted'; tb.appendChild(tr); }
+    if (!list.length) { var tr = el('tr'); var c = td(tr, STAFF.length ? '找不到' : '名冊還是空的，等每天早上同步'); c.colSpan = 7; c.className = 'muted'; tb.appendChild(tr); }
   }
+  var HRON = false, HRST = { pending: '待核對', confirmed: '已建檔', imported: '已入人易' };
   loaders.staff = function () {
     api('/staff').then(function (d) {
-      STAFF = d.staff;
+      STAFF = d.staff; HRON = !!d.hrOn;
+      var hw = $('stHrWrap'), hb = $('stHrOnly'); hb.innerHTML = ''; hw.style.display = (d.hrOnly || []).length ? '' : 'none';
+      (d.hrOnly || []).forEach(function (h) { var tr = el('tr'); td(tr, h.name); td(tr, h.dept_name || ''); td(tr, h.title || ''); td(tr, h.hire_date || ''); td(tr, el('span', HRST[h.status] || h.status, 'tag t-late')); td(tr, h.created); hb.appendChild(tr); });
       var bound = STAFF.filter(function (r) { return r.devices > 0; }).length;
       var st = $('stStats'); st.innerHTML = '';
-      [['名冊人數', STAFF.length], ['已綁定打卡', bound], ['尚未綁定', STAFF.length - bound]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
+      [['名冊人數', STAFF.length], ['已綁定打卡', bound], ['尚未綁定', STAFF.length - bound]].concat(HRON ? [['已建檔', STAFF.filter(function (r) { return r.hr; }).length], ['已建檔・人易尚無', (d.hrOnly || []).length]] : []).forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
       $('stMsg').textContent = d.synced ? '最後同步 ' + d.synced : '';
       var um = $('stUnmatched'); um.innerHTML = ''; $('stUnWrap').style.display = d.unmatched.length ? '' : 'none';
       $('stUnWrap').style.display = (d.unmatched.length || (d.dupNo || []).length) ? '' : 'none';
@@ -478,6 +492,8 @@
     });
   };
   $('stLoad').onclick = loaders.staff;
+  var HR_URL = /^hys\./.test(location.hostname) ? '/hr/' : 'https://hr-scan.aa22156921.workers.dev/';
+  loaders.hr = function () { $('hrOpen').href = HR_URL; if (!$('hrFrame').src) $('hrFrame').src = HR_URL; };
   $('stQ').oninput = staffRows;
   $('stMerge').onclick = function () { api('/staff/merge', {}).then(function (d) { $('stMsg').textContent = '補上 ' + d.merged + ' 位員工的員編'; loaders.staff(); }); };
   $('stCsv').onclick = function () {
