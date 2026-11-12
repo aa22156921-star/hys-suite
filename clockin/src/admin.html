@@ -281,6 +281,12 @@
           <tbody id="aRows"></tbody>
         </table></div>
       </div>
+      <div class="card">
+        <div class="row"><h2 style="margin:0 auto 0 0">應追蹤名單（幹部・機動）</h2><button id="tkLoad">重新整理</button></div>
+        <p class="muted" style="margin:6px 0 8px">依人事名冊職稱自動列入：經理、協理、襄理、督導、副理（平日 9、12、18 點自動定位，9～18 點可立即定位）；職稱含「機動」（依班表，每班自動定位 3 次，上班時段可立即定位）。只在上班時段定位。還沒裝 App 的要請他安裝，才抓得到位置。</p>
+        <div class="stats" id="tkStats"></div>
+        <div class="scroll"><table><thead><tr><th>類別</th><th>員編</th><th>姓名</th><th>職稱</th><th>部門／案場</th><th>追蹤方式</th><th>狀態</th><th>最後定位</th></tr></thead><tbody id="tkRows"></tbody></table></div>
+      </div>
       <div class="card" id="aDetail" style="display:none">
         <div class="row">
           <h2 id="aName" style="margin:0 auto 0 0"></h2>
@@ -678,7 +684,7 @@
         var no = el('input'); no.value = e.emp_no || ''; no.size = 7; no.placeholder = '未填'; no.style.padding = '4px 6px';
         no.onchange = function () { api('/employees/empno', { id: e.id, emp_no: no.value.trim() }).then(function () { no.style.background = '#dcfce7'; }).catch(function (x) { alert(x.message || x); }); };
         td(tr, no);
-        var ap = el('input'); ap.value = e.auto_ping || ''; ap.size = 18; ap.placeholder = '例 1-5 09:00,12:00,18:00'; ap.style.padding = '4px 6px';
+        var ap = el('input'); ap.value = e.auto_ping || ''; ap.size = 18; ap.placeholder = '例 1-5 09:00,12:00,18:00 或 班表'; ap.style.padding = '4px 6px';
         ap.onchange = function () { api('/employees/auto', { id: e.id, auto_ping: ap.value.trim() }).then(function () { ap.style.background = '#dcfce7'; }).catch(function (x) { ap.style.background = '#fee2e2'; alert(x.message || x); }); };
         td(tr, ap);
         var rm = el('input'); rm.type = 'checkbox'; rm.checked = !!e.roam; rm.title = '幹部、督導、機動：不比對案場，只記時間與位置';
@@ -855,7 +861,23 @@
   }
   function ago(ms, now) { var m = Math.round((now - ms) / 60e3); return m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; }
   function showMap(lat, lng) { $('aMap').src = 'https://maps.google.com/maps?q=' + lat + ',' + lng + '&z=16&output=embed'; }
+  function loadTracked() {
+    api('/tracked').then(function (d) {
+      var tb = $('tkRows'); tb.innerHTML = '';
+      var on = d.list.filter(function (r) { return r.app > 0; }).length, web = d.list.filter(function (r) { return !r.app && r.dev > 0; }).length;
+      var st = $('tkStats'); st.innerHTML = '';
+      [['應追蹤', d.list.length], ['已裝 App／捷徑', on], ['只綁網頁（抓不到背景位置）', web], ['尚未綁定', d.list.length - on - web]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
+      d.list.forEach(function (r) {
+        var tr = el('tr'); td(tr, r.kind); td(tr, r.emp_no); td(tr, r.name); td(tr, r.title); td(tr, r.dept_name || '');
+        td(tr, r.auto_ping === '班表' ? '依班表' : (r.auto_ping || '—'));
+        td(tr, el('span', r.app > 0 ? '已裝 App' : r.dev > 0 ? '只綁網頁' : '未綁定', 'tag ' + (r.app > 0 ? 't-ok' : r.dev > 0 ? 't-late' : 't-missing')));
+        td(tr, r.last || '—'); tb.appendChild(tr);
+      });
+    });
+  }
+  $('tkLoad').onclick = loadTracked;
   loaders.app = function () {
+    loadTracked();
     $('aMsg').textContent = '載入中…';
     api('/app-staff').then(function (d) {
       var tb = $('aRows'); tb.innerHTML = ''; $('aMsg').textContent = '共 ' + d.staff.length + ' 人';
@@ -863,7 +885,7 @@
         var tr = el('tr'); if (!s.active) tr.style.opacity = .5;
         var nm = el('a', s.name); nm.href = '#'; nm.style.fontWeight = '700';
         nm.onclick = function (ev) { ev.preventDefault(); openStaff(s); }; td(tr, nm);
-        td(tr, s.emp_no || '—'); td(tr, s.auto_ping || '依班表');
+        td(tr, s.emp_no || '—'); td(tr, s.auto_ping === '班表' ? '依班表' : (s.auto_ping || '—'));
         td(tr, s.loc ? s.loc.when + '（' + ago(s.loc.ms, d.now) + '）' : (s.last && s.last.err ? el('span', ERR[s.last.err] || s.last.err, 'tag t-missing') : '還沒有定位'));
         td(tr, s.loc ? placeTag(s.loc.at, s.loc.nearest) : '');
         td(tr, s.has_app ? 'v' + (s.app_version || '?') : 'iPhone 捷徑');

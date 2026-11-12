@@ -130,6 +130,24 @@ function autoChecks(str, nowMs) {
   return out.slice(0, 6);
 }
 
+// 幹部、機動的追蹤時段。auto_ping = '班表'：依排班（班前 15 分到班後 15 分可定位；每班定時抓 3 次：上班後 30 分、班中、下班前 30 分）
+const SHIFT_MODE = '班表';
+const CADRE_RE = /經理|協理|襄理|督導|副理/;
+const MOBILE_RE = /機動/;
+async function trackState(env, emp, now) {
+  if (emp.auto_ping !== SHIFT_MODE) return { inWin: inWorkWindow(emp.auto_ping, now), checks: autoChecks(emp.auto_ping, now), all: [] };
+  const sh = await shiftsAround(env, emp.id, now), all = [];
+  for (const x of sh) { const len = x.end - x.start; for (const t of [x.start + 30 * 60e3, x.start + len / 2, x.end - 30 * 60e3]) all.push(Math.round(t)); }
+  all.sort((a, b) => a - b);
+  return { inWin: sh.some((x) => now >= x.start - 15 * 60e3 && now <= x.end + 15 * 60e3), checks: all.filter((t) => t > now).slice(0, 6), all };
+}
+// 依人事名冊職稱自動開啟追蹤：經理／協理／襄理／督導／副理 → 平日 9、12、18 點；職稱含「機動」→ 依班表。後台手動設定過的不覆蓋
+async function applyTrackRules(DB) {
+  await DB.prepare(`UPDATE employees SET roam = 1,
+      auto_ping = CASE WHEN (SELECT title FROM staff WHERE uid = employees.nueip_uid) LIKE '%機動%' THEN '班表' ELSE '1-5 09:00,12:00,18:00' END
+    WHERE auto_ping IS NULL AND active = 1 AND nueip_uid IN (SELECT uid FROM staff WHERE active = 1 AND (title LIKE '%機動%' OR title LIKE '%經理%' OR title LIKE '%協理%' OR title LIKE '%襄理%' OR title LIKE '%督導%' OR title LIKE '%副理%'))`).run();
+}
+
 // iPhone 捷徑：手機每個整點問一次「現在要不要回報？」，由後台設定決定（回 1 或 0）
 // 規則：在他的上班日、且某個設定時間落在「過去 65 分鐘～未來 5 分鐘」內、而那之後還沒回報過 → 1；
 //      或後台按了「立即定位」且還沒回報 → 1（同樣只限上班時段）。其餘一律 0，手機就不會抓定位。
@@ -137,12 +155,19 @@ async function apiShouldReport(req, env) {
   const txt = (v) => new Response(v, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
   const emp = await currentEmployee(req, env);
   if (!emp || !emp.active) return txt('0');
-  const a = parseAuto(emp.auto_ping); if (!a) return txt('0');
-  const now = Date.now(), d = twDate(now);
-  const wd = new Date(twMs(d, '12:00') + TZ_OFFSET).getUTCDay() || 7;
-  if (!a.days.has(wd)) return txt('0');
+  const now = Date.now();
   const last = await env.DB.prepare('SELECT MAX(ms) AS ms FROM pings WHERE emp_id = ?').bind(emp.id).first();
   const lastMs = (last && last.ms) || 0;
+  if (emp.auto_ping === SHIFT_MODE) {
+    const st = await trackState(env, emp, now);
+    for (const ms of st.all) if (ms <= now + 5 * 60e3 && ms > now - 65 * 60e3 && lastMs < ms - 5 * 60e3) return txt('1');
+    if (st.inWin && emp.locate_req && now - emp.locate_req < 90 * 60e3 && lastMs < emp.locate_req) return txt('1');
+    return txt('0');
+  }
+  const a = parseAuto(emp.auto_ping); if (!a) return txt('0');
+  const d = twDate(now);
+  const wd = new Date(twMs(d, '12:00') + TZ_OFFSET).getUTCDay() || 7;
+  if (!a.days.has(wd)) return txt('0');
   for (const t of a.times) {
     const ms = twMs(d, t);
     if (ms <= now + 5 * 60e3 && ms > now - 65 * 60e3 && lastMs < ms - 5 * 60e3) return txt('1');
@@ -292,7 +317,8 @@ async function apiMe(req, env) {
   const shifts = await shiftsAround(env, emp.id, now);
   const upcoming = shifts.filter((s) => s.end + WINDOW_MIN * 60e3 >= now).slice(0, 2)
     .map((s) => ({ date: s.date, name: s.name, start: s.start, end: s.end }));
-  const poll = inWorkWindow(emp.auto_ping, now);
+  const track = await trackState(env, emp, now);
+  const poll = track.inWin;
   let locate = false;
   if (poll && emp.locate_req && now - emp.locate_req < 30 * 60e3) {
     const last = await env.DB.prepare('SELECT MAX(ms) AS ms FROM pings WHERE emp_id = ?').bind(emp.id).first();
@@ -304,9 +330,10 @@ async function apiMe(req, env) {
     if (r.length === 1) {
       await env.DB.prepare('UPDATE employees SET nueip_uid = ?, emp_no = COALESCE(emp_no, ?), nueip_dept = COALESCE(nueip_dept, ?) WHERE id = ?').bind(r[0].uid, r[0].emp_no, r[0].dept_id, emp.id).run();
       emp.emp_no = emp.emp_no || r[0].emp_no;
+      await applyTrackRules(env.DB);
     }
   }
-  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', now, windowMin: WINDOW_MIN, upcoming, checks: autoChecks(emp.auto_ping, now), poll, locate });
+  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
 }
 
 // 把名冊的員編／NUEIP 帳號補進已建立、但還沒對上的員工（姓名在名冊裡唯一才自動對）
@@ -316,6 +343,7 @@ async function mergeRoster(DB) {
       emp_no = COALESCE(emp_no, (SELECT emp_no FROM staff WHERE staff.name = employees.name AND active = 1)),
       nueip_dept = COALESCE(nueip_dept, (SELECT dept_id FROM staff WHERE staff.name = employees.name AND active = 1))
     WHERE nueip_uid IS NULL AND (SELECT COUNT(*) FROM staff WHERE staff.name = employees.name AND active = 1) = 1`).run();
+  await applyTrackRules(DB);
   return r.meta ? r.meta.changes : 0;
 }
 
@@ -352,6 +380,7 @@ async function apiRegister(req, env) {
   await DB.prepare('INSERT INTO devices (emp_id, device_hash, ua, bound_at) VALUES (?, ?, ?, ?)').bind(emp.id, hash, ua, now).run();
   await DB.prepare('UPDATE employees SET bound_at = COALESCE(bound_at, ?), bound_ua = COALESCE(bound_ua, ?), consent_at = COALESCE(consent_at, ?) WHERE id = ?').bind(now, ua, now, emp.id).run();
   if (st && !emp.nueip_uid) await DB.prepare('UPDATE employees SET emp_no = ?, nueip_uid = ?, nueip_dept = COALESCE(?, nueip_dept) WHERE id = ?').bind(st.emp_no, st.uid, st.dept_id, emp.id).run();
+  await applyTrackRules(DB);
   return json({ ok: true, name: emp.name, token }, 200, { 'Set-Cookie': cookieHeader(token) });
 }
 
@@ -642,15 +671,15 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
   }
   if (p === '/employees/auto' && M === 'POST') { // 幹部定時定位
     const v = String(b.auto_ping || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-    if (v && !parseAuto(v)) return json({ error: '格式像這樣：1-5 09:00,12:00,18:00' }, 400);
+    if (v && v !== SHIFT_MODE && !parseAuto(v)) return json({ error: '格式像這樣：1-5 09:00,12:00,18:00，或填「班表」（依排班時間追蹤）' }, 400);
     await DB.prepare('UPDATE employees SET auto_ping = ? WHERE id = ?').bind(v || null, b.id).run();
     return json({ ok: true });
   }
   if (p === '/employees/locate' && M === 'POST') { // 後台要求「立即定位」
-    const e = await DB.prepare('SELECT auto_ping FROM employees WHERE id = ?').bind(b.id).first();
+    const e = await DB.prepare('SELECT id, auto_ping FROM employees WHERE id = ?').bind(b.id).first();
     if (!e) return json({ error: '找不到這個人' }, 404);
     if (!e.auto_ping) return json({ error: '這個人沒有設定「幹部定時定位」，請先到員工分頁設定' }, 400);
-    if (!inWorkWindow(e.auto_ping, Date.now())) return json({ error: '現在不是他的上班時段（' + e.auto_ping + '），不能要求定位' }, 400);
+    if (!(await trackState(env, e, Date.now())).inWin) return json({ error: e.auto_ping === SHIFT_MODE ? '他現在沒有排班，不能要求定位' : '現在不是他的上班時段（' + e.auto_ping + '），不能要求定位' }, 400);
     const now = Date.now();
     await DB.prepare('UPDATE employees SET locate_req = ? WHERE id = ?').bind(now, b.id).run();
     return json({ ok: true, at: now });
@@ -840,7 +869,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
       const m = lastOk ? matchSite(sites, lastOk.lat, lastOk.lng) : { at: null, nearest: null };
       const lp = await DB.prepare("SELECT ua FROM pings WHERE emp_id = ? AND ua LIKE '%ClockinApp%' ORDER BY ms DESC LIMIT 1").bind(e.id).first();
       const ver = (String((lp && lp.ua) || e.app_ua || '').match(/ClockinApp\/([\d.]+)/) || [])[1] || ''; // 以最近一次 App 回報的版本為準
-      out.push({ id: e.id, name: e.name, emp_no: e.emp_no, auto_ping: e.auto_ping, active: e.active, app_version: ver, has_app: !!e.has_app, can_locate: inWorkWindow(e.auto_ping, Date.now()),
+      out.push({ id: e.id, name: e.name, emp_no: e.emp_no, auto_ping: e.auto_ping, active: e.active, app_version: ver, has_app: !!e.has_app, can_locate: (await trackState(env, e, Date.now())).inWin,
         locate_req: e.locate_req, waiting: !!(e.locate_req && Date.now() - e.locate_req < (e.has_app ? 30 : 90) * 60e3 && !(last && last.ms >= e.locate_req)),
         app_since: e.app_since, last: last ? { when: twDate(last.ms) + ' ' + twClock(last.ms), ms: last.ms, err: last.err } : null,
         loc: lastOk ? { when: twDate(lastOk.ms) + ' ' + twClock(lastOk.ms), ms: lastOk.ms, lat: lastOk.lat, lng: lastOk.lng, acc: lastOk.acc, at: m.at, nearest: m.nearest } : null });
@@ -848,6 +877,18 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     return json({ staff: out, now: Date.now() });
   }
 
+  // 應追蹤名單：人事名冊裡所有幹部、機動，以及綁定狀況
+  if (p === '/tracked' && M === 'GET') {
+    await mergeRoster(DB);
+    const { results } = await DB.prepare(`SELECT s.emp_no, s.name, s.title, s.dept_name, e.id AS emp_id, e.auto_ping,
+        (SELECT COUNT(*) FROM devices d WHERE d.emp_id = e.id AND (d.ua LIKE '%ClockinApp%' OR d.ua = 'iPhone 捷徑')) AS app,
+        (SELECT COUNT(*) FROM devices d WHERE d.emp_id = e.id) AS dev,
+        (SELECT MAX(ms) FROM pings WHERE emp_id = e.id AND lat IS NOT NULL) AS last_ms
+      FROM staff s LEFT JOIN employees e ON e.nueip_uid = s.uid
+      WHERE s.active = 1 AND (s.title LIKE '%機動%' OR s.title LIKE '%經理%' OR s.title LIKE '%協理%' OR s.title LIKE '%襄理%' OR s.title LIKE '%督導%' OR s.title LIKE '%副理%')
+      ORDER BY (s.title LIKE '%機動%'), s.dept_name, s.name`).all();
+    return json({ list: results.map((r) => ({ ...r, kind: MOBILE_RE.test(r.title) ? '機動' : '幹部', last: r.last_ms ? twDate(r.last_ms) + ' ' + twClock(r.last_ms) : null })) });
+  }
   // 原始定位紀錄（可指定 emp＝只看一個人）
   if (p === '/pings' && M === 'GET') {
     const date = DATE_RE.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : twDate(Date.now());
