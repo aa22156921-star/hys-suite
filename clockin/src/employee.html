@@ -128,7 +128,7 @@
     </div>
     <button class="main" id="btnRetry" style="margin-bottom:14px">重新打卡</button>
     <div class="card" id="apprCard" style="display:none"><h2>待我核准 <span id="apprN"></span></h2><div id="apprList"></div></div>
-    <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button></div>
+    <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button><button id="btnOut" style="display:none">外出</button></div>
     <div class="card" id="shiftCard">
       <h2>我的班</h2>
       <div id="shifts"></div>
@@ -157,6 +157,23 @@
   </section>
 
   <!-- 請假 -->
+  <section class="view" id="vOut">
+    <button class="link" data-back style="width:auto">← 返回</button>
+    <h1 class="big">外出申報</h1>
+    <span class="lbl">哪天</span>
+    <div class="seg" id="oDay"><button data-v="0" class="on">今天</button><button data-v="1">明天</button></div>
+    <span class="lbl">時間</span>
+    <div class="row2"><input type="time" id="oT1" class="fin"><input type="time" id="oT2" class="fin"></div>
+    <span class="lbl">去哪裡（案場名稱或地點）</span><input id="oPlace" class="fin" maxlength="40" list="oSites" placeholder="例：碧波白社區、台北富邦銀行">
+    <datalist id="oSites"></datalist>
+    <span class="lbl">事由</span>
+    <div class="chips" id="oWhy"><button>巡查案場</button><button>拜訪管委會／客戶</button><button>處理客訴</button><button>支援其他案場</button><button>銀行／公所辦公事</button><button>開會／訓練</button><button>其他</button></div>
+    <span class="lbl">說明（可不填）</span><input id="oNote" class="fin" maxlength="100">
+    <button class="main" id="oGo" style="margin-top:18px;font-size:21px;padding:18px">送出申報</button>
+    <div class="msg big" id="oMsg"></div>
+    <p class="muted">外出期間系統會比對定位，與申報地點不符會提醒主管。私人事務請改請假。</p>
+  </section>
+
   <section class="view" id="vLeave">
     <button class="link" data-back style="width:auto">← 返回</button>
     <h1 class="big">請假</h1>
@@ -189,7 +206,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function tw(ms) { var t = new Date(ms + 8 * 3600e3); return { d: t.getUTCFullYear() + '/' + pad(t.getUTCMonth() + 1) + '/' + pad(t.getUTCDate()),
     md: (t.getUTCMonth() + 1) + '/' + t.getUTCDate(), w: '日一二三四五六'.charAt(t.getUTCDay()), hm: pad(t.getUTCHours()) + ':' + pad(t.getUTCMinutes()), s: pad(t.getUTCSeconds()) }; }
-  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
+  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave', 'vOut'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
 
 
   function api(path, opt) {
@@ -255,7 +272,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
 
   function enterMain() {
-    show('vMain'); $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
+    show('vMain'); $('btnOut').style.display = me.canOut ? '' : 'none'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
     var box = $('shifts'); box.innerHTML = '';
     $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
     me.upcoming.forEach(function (s) {
@@ -281,7 +298,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
     top.appendChild(el('b', r.kindName + '：' + r.text)); d.appendChild(top);
     var sub = el('div', null, 'sub');
     sub.appendChild(el('span', r.statusName, 'tag t-' + r.status));
-    sub.appendChild(document.createTextNode((r.reason || '') + (mine ? '' : '　📍' + (r.at || (r.lat != null ? '無對應案場' : '沒有定位'))) + (r.note ? '　主管：' + r.note : '')));
+    sub.appendChild(document.createTextNode((r.reason || '') + (mine ? '' : '　📍' + (r.at || (r.lat != null ? '無對應案場' : '沒有定位'))) + (r.note ? (r.decided_by === '系統自動審核' ? '　系統：' : '　主管：') + r.note : '')));
     d.appendChild(sub);
     if (mine && r.status === 'pending') {
       var a = el('div', null, 'acts'), c = el('button', '取消申請');
@@ -339,6 +356,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
     }).then(function (d) {
       $('fGo').disabled = false;
       if (d.error) { $('fMsg').className = 'msg big err'; $('fMsg').textContent = d.error; return; }
+      if (d.rejected) { $('fMsg').className = 'msg big err'; $('fMsg').textContent = '已退回：' + d.message; loadMy(); return; }
       $('fMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
     }).catch(function () { $('fGo').disabled = false; $('fMsg').className = 'msg big err'; $('fMsg').textContent = '網路錯誤，請再按一次'; });
   };
@@ -362,6 +380,29 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
       if (d.error) { $('lMsg').className = 'msg big err'; $('lMsg').textContent = d.error; return; }
       $('lMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
     }).catch(function () { $('lGo').disabled = false; $('lMsg').className = 'msg big err'; $('lMsg').textContent = '網路錯誤，請再按一次'; });
+  };
+
+  seg('oDay'); seg('oWhy');
+  $('btnOut').onclick = function () {
+    var t = new Date(now() + 8 * 3600e3), hh = ('0' + t.getUTCHours()).slice(-2), mm = t.getUTCMinutes() < 30 ? '30' : '00', h2 = mm === '00' ? ('0' + ((t.getUTCHours() + 1) % 24)).slice(-2) : hh;
+    $('oT1').value = h2 + ':' + mm; $('oT2').value = ('0' + ((+h2 + 2) % 24)).slice(-2) + ':' + mm;
+    $('oPlace').value = ''; $('oNote').value = ''; $('oMsg').textContent = '';
+    [].forEach.call($('oWhy').querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+    var dl = $('oSites'); dl.innerHTML = ''; ((my && my.sites) || []).forEach(function (n) { var o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+    show('vOut'); window.scrollTo(0, 0);
+  };
+  $('oGo').onclick = function () {
+    var why = segVal('oWhy'), note = $('oNote').value.trim();
+    if (!why) { $('oMsg').className = 'msg big err'; $('oMsg').textContent = '請選外出事由'; return; }
+    var d = new Date(now() + 8 * 3600e3 + (segVal('oDay') === '1' ? 86400e3 : 0)).toISOString().slice(0, 10);
+    var b = { kind: 'out', date: d, time: $('oT1').value, time_to: $('oT2').value, place: $('oPlace').value.trim(), reason: why + (note ? '：' + note : '') };
+    $('oGo').disabled = true; $('oMsg').className = 'msg big'; $('oMsg').textContent = '送出中…';
+    getPos().then(function (p) { if (p.lat != null) { b.lat = p.lat; b.lng = p.lng; b.acc = p.acc; } return api('/api/request', { method: 'POST', body: JSON.stringify(b) }); }).then(function (r) {
+      $('oGo').disabled = false;
+      if (r.error) { $('oMsg').className = 'msg big err'; $('oMsg').textContent = r.error; return; }
+      if (r.rejected) { $('oMsg').className = 'msg big err'; $('oMsg').textContent = '已退回：' + r.message; loadMy(); return; }
+      $('oMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
+    }).catch(function () { $('oGo').disabled = false; $('oMsg').className = 'msg big err'; $('oMsg').textContent = '網路錯誤，請再按一次'; });
   };
 
   var busy = false, lastRun = 0;

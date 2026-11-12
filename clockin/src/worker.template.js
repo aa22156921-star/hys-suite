@@ -200,12 +200,13 @@ async function shiftsAround(env, empId, nowMs) {
 }
 
 // ---------------- 補卡／請假申請與核准 ----------------
-const KIND_NAME = { punch: '補卡', leave: '請假' };
+const KIND_NAME = { punch: '補卡', leave: '請假', out: '外出' };
 const STATUS_NAME = { pending: '待核准', approved: '已核准', rejected: '已退回', cancelled: '已取消' };
 async function audit(env, actor, action, detail) {
   try { await env.DB.prepare('INSERT INTO audit (ms, actor, action, detail) VALUES (?, ?, ?, ?)').bind(Date.now(), String(actor).slice(0, 60), String(action).slice(0, 60), detail == null ? null : String(detail).slice(0, 1000)).run(); } catch (e) { /* 紀錄失敗不影響主流程 */ }
 }
 function reqText(r) {
+  if (r.kind === 'out') return r.date + ' ' + r.time + '–' + (r.time_to || '') + ' 外出到 ' + (r.leave_type || '');
   if (r.kind === 'punch') return r.date + ' ' + (r.io === 'out' ? '下班' : '上班') + ' ' + r.time;
   const d = r.date === r.date_to || !r.date_to ? r.date : r.date + '～' + r.date_to;
   return (r.leave_type || '請假') + ' ' + d + (r.time ? ' ' + r.time + '–' + (r.time_to || '') : ' 全天');
@@ -220,12 +221,30 @@ async function canApprove(env, approver, requestEmpId) {
 const REQ_COLS = 'r.id, r.emp_id, e.name, e.emp_no, r.kind, r.status, r.date, r.date_to, r.io, r.time, r.time_to, r.leave_type, r.reason, r.lat, r.lng, r.acc, r.created_ms, r.decided_ms, r.decided_by, r.note';
 async function decorate(env, rows) {
   if (!rows.length) return rows;
-  const sites = await activeSites(env);
-  return rows.map((r) => {
+  const sites = await activeSites(env), out = [];
+  for (const r of rows) {
     const m = r.lat != null ? matchSite(sites, r.lat, r.lng) : null;
-    return { ...r, text: reqText(r), kindName: KIND_NAME[r.kind], statusName: STATUS_NAME[r.status], at: m && m.at ? m.at.name : null,
-             created: twDate(r.created_ms) + ' ' + twClock(r.created_ms), decided: r.decided_ms ? twDate(r.decided_ms) + ' ' + twClock(r.decided_ms) : null };
-  });
+    out.push({ ...r, text: reqText(r), kindName: KIND_NAME[r.kind], statusName: STATUS_NAME[r.status], at: m && m.at ? m.at.name : null,
+      check: r.kind === 'out' ? await outCheck(env, sites, r) : null,
+      created: twDate(r.created_ms) + ' ' + twClock(r.created_ms), decided: r.decided_ms ? twDate(r.decided_ms) + ' ' + twClock(r.decided_ms) : null });
+  }
+  return out;
+}
+// 外出申報 vs 實際定位：申報的地點是案場就比對有沒有到；不是案場就列出那段時間人在哪
+const siteKey = (n) => String(n || '').replace(/社區|大樓|大廈|管理委員會|公寓|\s/g, '');
+async function outCheck(env, sites, r) {
+  const a = twMs(r.date, r.time), b = twMs(r.date, r.time_to || r.time), now = Date.now();
+  if (now < a) return { level: 'wait', text: '尚未開始' };
+  const { results } = await env.DB.prepare('SELECT ms, lat, lng FROM pings WHERE emp_id = ? AND ms BETWEEN ? AND ? AND lat IS NOT NULL ORDER BY ms').bind(r.emp_id, a - 15 * 60e3, b + 15 * 60e3).all();
+  if (!results.length) return { level: now > b ? 'bad' : 'wait', text: now > b ? '外出期間沒有任何定位紀錄' : '外出中，還沒有定位' };
+  const key = siteKey(r.leave_type), target = key ? sites.find((x) => siteKey(x.name) && (siteKey(x.name).includes(key) || key.includes(siteKey(x.name)))) : null;
+  const where = results.map((p) => { const m = matchSite(sites, p.lat, p.lng); return { t: twClock(p.ms), at: m.at ? m.at.name : null }; });
+  const summary = where.map((w) => w.t + ' ' + (w.at || '非案場')).join('、');
+  if (target) {
+    const hit = where.find((w) => w.at === target.name);
+    return hit ? { level: 'ok', text: '有到 ' + target.name + '（' + hit.t + '）' } : { level: 'bad', text: '申報到 ' + target.name + '，但定位不在該處：' + summary };
+  }
+  return { level: 'info', text: '定位：' + summary };
 }
 async function decide(env, id, ok, note, actor) {
   const r = await env.DB.prepare('SELECT * FROM requests WHERE id = ?').bind(id).first();
@@ -237,6 +256,38 @@ async function decide(env, id, ok, note, actor) {
   const e = await env.DB.prepare('SELECT name FROM employees WHERE id = ?').bind(r.emp_id).first();
   await audit(env, actor, (ok ? '核准' : '退回') + KIND_NAME[r.kind], (e ? e.name : '') + '｜' + reqText(r) + (note ? '｜' + note : ''));
   return { ok: true };
+}
+
+// 補卡理由自動審核：荒唐、與出勤無關的理由 → 退回並說明；挑釁、辱罵 → 退回、冷靜回覆、留存紀錄並在後台標示
+// 只看員工自己打的說明；只選了制式原因（忘記打卡、手機沒電…）的不審，直接交給主管
+const SCREEN_ACTOR = '系統自動審核';
+const SCREEN_PROMPT = `你是保全物業公司出勤系統的「補卡理由」審核助手。只回一個 JSON：{"verdict":"ok|absurd|abusive","reply":"給員工看的話"}
+- ok：任何說得通的理由都算（忘了打卡、手機沒電、沒網路、定位失敗、App 打不開、臨時支援其他案場、主管交辦、身體不適等）。拿不準就選 ok，交給主管判斷。reply 留空。
+- absurd：明顯不可能是真的、或跟出勤無關（例如被外星人抓走、亂打的字、只有符號或表情、開玩笑）。reply 客氣但明確：說明這個理由無法作為補卡依據，請附上實際原因重新申請。
+- abusive：辱罵、嘲諷、挑釁、威脅主管或公司。reply 冷靜、專業、不帶情緒：申請已退回、內容已留存紀錄，請遵守公司工作規則與職場禮儀；若內容是辱罵或威脅特定的人，可提醒此類言論可能涉及法律責任，但不要恐嚇、不要斷定他犯罪。
+reply 用繁體中文，60 字以內，不要加引號以外的符號。`;
+const OUT_PROMPT = `你是保全物業公司出勤系統的「外出申報」審核助手。申報人是勤務主管、督導或機動人員，上班時間外出要先申報。只回一個 JSON：{"verdict":"ok|absurd|abusive","reply":"給申報人看的話"}
+- ok：和工作有關、說得通就算（巡查案場、拜訪管委會或客戶、處理客訴、支援其他案場、送公文、到銀行／公所／郵局辦公司事務、採購工作用品、開會、教育訓練、維修會勘）。時間長度大致合理即可。拿不準就選 ok 交給主管。reply 留空。
+- absurd：理由不合邏輯或明顯是私事（例如上班時間去逛街、看電影、接小孩、辦私人事情卻申報公出、事由與地點完全對不上、時間長得不合理例如巡一個案場要 8 小時）。reply 客氣但明確：指出哪裡對不上；私事請改請假。不要故意刁難。
+- abusive：辱罵、嘲諷、挑釁。reply 冷靜專業：申報已退回、內容已留存紀錄，請遵守工作規則與職場禮儀；若辱罵或威脅特定的人，可提醒可能涉及法律責任，但不要恐嚇、不要斷定犯罪。
+reply 用繁體中文，60 字以內。`;
+async function screenReason(env, text, kind, ctxText) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const part = t.includes('：') ? t.slice(t.indexOf('：') + 1).trim() : t;
+  if (part && (!/[一-鿿A-Za-z]/.test(part) || /^(.)\1{3,}$/.test(part))) return { verdict: 'absurd', reply: kind === 'out' ? '外出說明看不出事由，請寫清楚實際原因後重新申報。' : '補卡說明看不出原因，請寫清楚實際狀況後重新申請。' };
+  if (!env.AI) return null;
+  try {
+    const run = env.AI.run(env.SCREEN_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+      messages: [{ role: 'system', content: kind === 'out' ? OUT_PROMPT : SCREEN_PROMPT }, { role: 'user', content: (kind === 'out' ? '外出申報：' + (ctxText || '') + '\n事由：' : '員工填的補卡說明：') + t.slice(0, 300) }], max_tokens: 200, temperature: 0 });
+    const out = await Promise.race([run, new Promise((r) => setTimeout(() => r(null), 8000))]);
+    const raw = !out ? '' : typeof out === 'string' ? out : typeof out.response === 'string' ? out.response : out.response ? JSON.stringify(out.response)
+      : out.choices && out.choices[0] ? out.choices[0].message.content : '';
+    const m = String(raw).match(/\{[\s\S]*\}/); if (!m) return null;
+    const j = JSON.parse(m[0]);
+    if (!['ok', 'absurd', 'abusive'].includes(j.verdict)) return null;
+    return { verdict: j.verdict, reply: String(j.reply || '').slice(0, 120) };
+  } catch (e) { return null; } // AI 出錯就不自動處理，照常給主管審
 }
 
 async function apiMy(req, env) {
@@ -254,7 +305,7 @@ async function apiMy(req, env) {
   const sched = (await DB.prepare(`SELECT s.date, sh.name, sh.start, sh.end FROM schedule s JOIN shifts sh ON sh.code = s.shift_code
     WHERE s.emp_id = ? AND s.date BETWEEN ? AND ? ORDER BY s.date`).bind(emp.id, addDays(today, -7), today).all()).results;
   return json({ mine: await decorate(env, mine), approvals: await decorate(env, approvals),
-    leaveTypes: types.length ? types : ['特休', '事假', '病假', '生理假', '家庭照顧假', '公假', '婚假', '喪假', '補休/調休'], recent: sched, today });
+    sites: (await activeSites(env)).map((x) => x.name), leaveTypes: types.length ? types : ['特休', '事假', '病假', '生理假', '家庭照顧假', '公假', '婚假', '喪假', '補休/調休'], recent: sched, today });
 }
 
 async function apiRequest(req, env) {
@@ -274,6 +325,14 @@ async function apiRequest(req, env) {
     if (dup) return json({ error: '這天的' + (b.io === 'in' ? '上班' : '下班') + '已經申請過了' }, 409);
     await DB.prepare(`INSERT INTO requests (emp_id, kind, date, io, time, reason, lat, lng, acc, created_ms) VALUES (?, 'punch', ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(emp.id, b.date, b.io, b.time, reason, ...loc, Date.now()).run();
+    const note = String(reason).includes('：') ? String(reason).slice(String(reason).indexOf('：') + 1) : (/^(忘記打卡|手機沒電|沒有網路|定位失敗|臨時支援其他案場|其他)$/.test(reason) ? '' : reason);
+    const sc = await screenReason(env, note, 'punch');
+    if (sc && sc.verdict !== 'ok') {
+      const last = await DB.prepare('SELECT id FROM requests WHERE emp_id = ? ORDER BY id DESC LIMIT 1').bind(emp.id).first();
+      const msg = (sc.verdict === 'abusive' ? '【不當言語】' : '【理由不成立】') + (sc.reply || (sc.verdict === 'abusive' ? '申請內容含不當言語，已退回並留存紀錄，請遵守公司工作規則。' : '這個理由無法作為補卡依據，請附上實際原因重新申請。'));
+      await decide(env, last.id, false, msg, SCREEN_ACTOR);
+      return json({ ok: true, rejected: true, message: msg });
+    }
   } else if (b.kind === 'leave') {
     const to = b.date_to || b.date;
     if (!DATE_RE.test(b.date || '') || !DATE_RE.test(to) || to < b.date) return json({ error: '請選正確的日期' }, 400);
@@ -284,6 +343,21 @@ async function apiRequest(req, env) {
     if (!b.allDay) { if (!TIME_RE.test(b.time || '') || !TIME_RE.test(b.time_to || '') || b.time_to <= b.time) return json({ error: '請選正確的請假時段' }, 400); t1 = b.time; t2 = b.time_to; }
     await DB.prepare(`INSERT INTO requests (emp_id, kind, date, date_to, time, time_to, leave_type, reason, lat, lng, acc, created_ms) VALUES (?, 'leave', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(emp.id, b.date, to, t1, t2, type, reason || null, ...loc, Date.now()).run();
+  } else if (b.kind === 'out') {
+    if (!emp.roam && !emp.auto_ping) return json({ error: '外出申報限勤務主管、督導、機動人員使用' }, 403);
+    if (!DATE_RE.test(b.date || '') || b.date < addDays(today, -1) || b.date > addDays(today, 7)) return json({ error: '外出申報只能填昨天到 7 天內' }, 400);
+    if (!TIME_RE.test(b.time || '') || !TIME_RE.test(b.time_to || '') || b.time_to <= b.time) return json({ error: '請選正確的外出時段' }, 400);
+    const place = String(b.place || '').trim().slice(0, 40); if (place.length < 2) return json({ error: '請填要去哪裡' }, 400);
+    if (!reason) return json({ error: '請選外出事由' }, 400);
+    await DB.prepare(`INSERT INTO requests (emp_id, kind, date, time, time_to, leave_type, reason, lat, lng, acc, created_ms) VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(emp.id, b.date, b.time, b.time_to, place, reason, isNum(b.lat) ? b.lat : null, isNum(b.lng) ? b.lng : null, isNum(b.acc) ? b.acc : null, Date.now()).run();
+    const sc = await screenReason(env, reason, 'out', b.date + ' ' + b.time + '–' + b.time_to + '，地點：' + place + '，職稱：' + (((await DB.prepare('SELECT title FROM staff WHERE uid = ?').bind(emp.nueip_uid || '').first()) || {}).title || '未知'));
+    if (sc && sc.verdict !== 'ok') {
+      const last = await DB.prepare('SELECT id FROM requests WHERE emp_id = ? ORDER BY id DESC LIMIT 1').bind(emp.id).first();
+      const msg = (sc.verdict === 'abusive' ? '【不當言語】' : '【事由不成立】') + (sc.reply || '外出事由與工作無關或對不上，私人事務請改請假。');
+      await decide(env, last.id, false, msg, SCREEN_ACTOR);
+      return json({ ok: true, rejected: true, message: msg });
+    }
   } else return json({ error: '不支援的申請' }, 400);
   await audit(env, emp.name, '送出' + KIND_NAME[b.kind], b.kind === 'punch' ? b.date + ' ' + (b.io === 'in' ? '上班' : '下班') + ' ' + b.time : (b.leave_type + ' ' + b.date + '～' + (b.date_to || b.date)));
   return json({ ok: true });
@@ -333,7 +407,7 @@ async function apiMe(req, env) {
       await applyTrackRules(env.DB);
     }
   }
-  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
+  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', canOut: !!(emp.roam || emp.auto_ping), now, windowMin: WINDOW_MIN, upcoming, checks: track.checks, poll, locate });
 }
 
 // 把名冊的員編／NUEIP 帳號補進已建立、但還沒對上的員工（姓名在名冊裡唯一才自動對）
@@ -550,7 +624,7 @@ async function apiAdmin(req, env, url) {
 }
 const ADMIN_ACTION = { '/sites': '修改工地', '/sites/bulk': '批次匯入工地', '/sites/delete': '刪除工地', '/employees': '新增員工', '/staff/merge': '名冊對應員工', '/employees/update': '修改員工',
   '/employees/unbind': '解除綁定', '/employees/empno': '修改員編', '/employees/auto': '修改定時定位', '/employees/roam': '修改外勤', '/employees/locate': '要求立即定位',
-  '/employees/shortcut': '產生捷徑代碼', '/shifts': '修改班別', '/schedule': '匯入班表', '/apk': '上架 App', '/apk/pull': '上架整合版 App' };
+  '/employees/shortcut': '產生捷徑代碼', '/shifts': '修改班別', '/schedule': '匯入班表', '/apk': '上架 App', '/apk/pull': '上架整合版 App', '/requests/reopen': '系統退回改回待審' };
 
 async function adminRoutes(req, env, url, p, M, DB, b) {
   // 今日異常：沒到班、遲到、不在案場、缺下班卡、待核准申請
@@ -570,6 +644,10 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
       }
     }
     const pend = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.status = 'pending' ORDER BY r.id`).all()).results;
+    // 外出申報 vs 定位不符
+    const outs = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.kind = 'out' AND r.status IN ('pending', 'approved') AND r.date BETWEEN ? AND ?`).bind(addDays(date, -1), date).all()).results;
+    for (const o of await decorate(env, outs)) if (o.check && o.check.level === 'bad')
+      items.push({ level: 'red', what: '外出不符：' + o.check.text, date: o.date, name: o.name, empNo: o.emp_no, shift: '外出 ' + o.time + '–' + o.time_to, site: o.leave_type });
     const noNo = (await DB.prepare("SELECT name FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id)").all()).results.map((x) => x.name);
     const noSite = (await DB.prepare(`SELECT dept_name FROM dept_map WHERE mode = 'none' ORDER BY dept_name`).all()).results.map((x) => x.dept_name);
     const sched = report.filter((r) => r.date === date).length, arrived = report.filter((r) => r.date === date && (r.inStatus === 'ok' || r.inStatus === 'late')).length;
@@ -582,6 +660,10 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const st = url.searchParams.get('status') || 'pending';
     const rows = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE (? = 'all' OR r.status = ?) ORDER BY r.id DESC LIMIT 300`).bind(st, st).all()).results;
     return json({ requests: await decorate(env, rows) });
+  }
+  if (p === '/requests/reopen' && M === 'POST') { // 系統自動退回的，管理員可改回待審
+    const r = await DB.prepare("UPDATE requests SET status = 'pending', decided_ms = NULL, decided_by = NULL, note = NULL WHERE id = ? AND status = 'rejected' AND decided_by = ?").bind(b.id, SCREEN_ACTOR).run();
+    return r.meta.changes ? json({ ok: true }) : json({ error: '只有系統自動退回的申請可以改回待審' }, 409);
   }
   if (p === '/requests/decide' && M === 'POST') {
     const out = await decide(env, b.id, !!b.ok, b.note, '管理員');

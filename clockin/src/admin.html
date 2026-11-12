@@ -409,7 +409,13 @@
         var loc = el('span'); if (r.lat != null) { loc.appendChild(document.createTextNode((r.at || '無對應案場') + ' ')); loc.appendChild(mapLink(r.lat, r.lng, '地圖')); } else loc.textContent = '沒有定位';
         td(tr, loc);
         td(tr, el('span', r.statusName + (r.decided_by ? '（' + r.decided_by + '）' : ''), 'tag ' + (r.status === 'approved' ? 't-ok' : r.status === 'pending' ? 't-late' : 't-missing')));
-        td(tr, decideBtns(r, loaders.req)); tb.appendChild(tr);
+        if (r.check) { var ck = el('div', r.check.text, 'tag ' + (r.check.level === 'ok' ? 't-ok' : r.check.level === 'bad' ? 't-missing' : 't-pending')); ck.style.marginTop = '4px'; tr.children[5].appendChild(ck); }
+        var act = decideBtns(r, loaders.req);
+        if (r.status === 'rejected' && r.decided_by === '系統自動審核') {
+          if (r.note) { var nt = el('div', r.note, 'muted'); tr.children[4].appendChild(nt); }
+          var ro = el('button', '改回待審', 'sm'); ro.onclick = function () { api('/requests/reopen', { id: r.id }).then(loaders.req).catch(function (x) { alert(x.message); }); }; act.appendChild(ro);
+        }
+        td(tr, act); tb.appendChild(tr);
       });
       if (!d.requests.length) { var tr = el('tr'); var c = td(tr, '沒有申請'); c.colSpan = 8; c.className = 'muted'; tb.appendChild(tr); }
     }).catch(err('qMsg'));
