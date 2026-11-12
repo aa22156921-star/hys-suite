@@ -132,7 +132,7 @@
     <button class="main" id="btnRetry" style="margin-bottom:14px">重新打卡</button>
     <div class="card" id="apprCard" style="display:none"><h2>待我核准 <span id="apprN"></span></h2><div id="apprList"></div></div>
     <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button></div>
-    <div class="row2" style="justify-content:center"><button id="btnOut" style="width:calc(50% - 5px)">外出申報</button><button id="btnBoss" style="width:calc(50% - 5px);display:none">考勤查核</button></div>
+    <div class="row2"><button id="btnOut">外出申報</button><button id="btnBoss" style="visibility:hidden">考勤查核</button></div>
     <div class="card" id="shiftCard">
       <h2>我的班</h2>
       <div id="shifts"></div>
@@ -287,7 +287,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
 
   function enterMain() {
-    show('vMain'); $('btnBoss').style.display = me.viewer ? '' : 'none'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
+    show('vMain'); $('btnBoss').style.visibility = me.viewer ? 'visible' : 'hidden'; $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
     var box = $('shifts'); box.innerHTML = '';
     $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
     me.upcoming.forEach(function (s) {
