@@ -85,7 +85,7 @@ final class Updater {
             if (old.exists()) old.delete();
             DownloadManager dm = (DownloadManager) act.getSystemService(Context.DOWNLOAD_SERVICE);
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(Api.BASE + "/app.apk?t=" + System.currentTimeMillis()))
-                    .setTitle("洪英系統 更新")
+                    .setTitle("洪英夥伴 更新")
                     .setMimeType("application/vnd.android.package-archive")
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                     .setDestinationInExternalFilesDir(act, Environment.DIRECTORY_DOWNLOADS, "update.apk");
