@@ -71,6 +71,8 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN nueip_dept TEXT').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE dept_map ADD COLUMN leader_uid TEXT').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN viewer INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* 已存在 */ }
+  try { await env.DB.prepare('ALTER TABLE requests ADD COLUMN place_lat REAL').run(); } catch (e) { /* 已存在 */ }
+  try { await env.DB.prepare('ALTER TABLE requests ADD COLUMN place_lng REAL').run(); } catch (e) { /* 已存在 */ }
   schemaReady = true;
 }
 
@@ -136,6 +138,22 @@ const SHIFT_MODE = '班表';
 const CADRE_RE = /經理|協理|襄理|督導|副理/;
 const MOBILE_RE = /機動/;
 async function trackState(env, emp, now) {
+  const base = await trackBase(env, emp, now);
+  // 外出申報期間：不論職務都定位（開始後 15 分、中間、結束前 15 分），期間內可立即定位
+  const d = twDate(now);
+  const outs = (await env.DB.prepare("SELECT date, time, time_to FROM requests WHERE emp_id = ? AND kind = 'out' AND status IN ('pending', 'approved') AND date IN (?, ?)").bind(emp.id, d, addDays(d, 1)).all()).results;
+  if (!outs.length) return base;
+  const all = base.all.slice(), extra = [];
+  let inOut = false;
+  for (const o of outs) {
+    const a = twMs(o.date, o.time), b = twMs(o.date, o.time_to), mid = Math.round((a + b) / 2);
+    for (const t of [Math.min(a + 15 * 60e3, mid), mid, Math.max(b - 15 * 60e3, mid)]) { extra.push(t); all.push(t); }
+    if (now >= a && now <= b) inOut = true;
+  }
+  const checks = [...new Set(base.checks.concat(extra.filter((t) => t > now)))].sort((x, y) => x - y).slice(0, 8);
+  return { inWin: base.inWin || inOut, checks, all: all.sort((x, y) => x - y) };
+}
+async function trackBase(env, emp, now) {
   if (emp.auto_ping !== SHIFT_MODE) return { inWin: inWorkWindow(emp.auto_ping, now), checks: autoChecks(emp.auto_ping, now), all: [] };
   const sh = await shiftsAround(env, emp.id, now), all = [];
   for (const x of sh) { const len = x.end - x.start; for (const t of [x.start + 30 * 60e3, x.start + len / 2, x.end - 30 * 60e3]) all.push(Math.round(t)); }
@@ -219,7 +237,7 @@ async function canApprove(env, approver, requestEmpId) {
     .bind(requestEmpId, approver.nueip_uid, approver.id).first();
   return !!r;
 }
-const REQ_COLS = 'r.id, r.emp_id, e.name, e.emp_no, r.kind, r.status, r.date, r.date_to, r.io, r.time, r.time_to, r.leave_type, r.reason, r.lat, r.lng, r.acc, r.created_ms, r.decided_ms, r.decided_by, r.note';
+const REQ_COLS = 'r.id, r.emp_id, e.name, e.emp_no, r.kind, r.status, r.date, r.date_to, r.io, r.time, r.time_to, r.leave_type, r.reason, r.lat, r.lng, r.acc, r.created_ms, r.decided_ms, r.decided_by, r.note, r.place_lat, r.place_lng';
 async function decorate(env, rows) {
   if (!rows.length) return rows;
   const sites = await activeSites(env), out = [];
@@ -231,6 +249,19 @@ async function decorate(env, rows) {
   }
   return out;
 }
+// 出行地點 → 座標：先找我們的案場，找不到再查 OpenStreetMap（台灣範圍）
+async function geocodePlace(env, place) {
+  const key = siteKey(place);
+  const site = key ? (await activeSites(env)).find((x) => siteKey(x.name) && (siteKey(x.name).includes(key) || key.includes(siteKey(x.name)))) : null;
+  if (site) return { lat: site.lat, lng: site.lng, site: site.name };
+  try {
+    const r = await Promise.race([fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&accept-language=zh-TW&q=' + encodeURIComponent(place),
+      { headers: { 'User-Agent': 'hys-attendance/1.0 (clockin.aa22156921.workers.dev)' } }), new Promise((ok) => setTimeout(() => ok(null), 5000))]);
+    if (!r || !r.ok) return null;
+    const j = await r.json();
+    return j && j[0] ? { lat: Number(j[0].lat), lng: Number(j[0].lon) } : null;
+  } catch (e) { return null; }
+}
 // 外出申報 vs 實際定位：申報的地點是案場就比對有沒有到；不是案場就列出那段時間人在哪
 const siteKey = (n) => String(n || '').replace(/社區|大樓|大廈|管理委員會|公寓|\s/g, '');
 async function outCheck(env, sites, r) {
@@ -238,6 +269,13 @@ async function outCheck(env, sites, r) {
   if (now < a) return { level: 'wait', text: '尚未開始' };
   const { results } = await env.DB.prepare('SELECT ms, lat, lng FROM pings WHERE emp_id = ? AND ms BETWEEN ? AND ? AND lat IS NOT NULL ORDER BY ms').bind(r.emp_id, a - 15 * 60e3, b + 15 * 60e3).all();
   if (!results.length) return { level: now > b ? 'bad' : 'wait', text: now > b ? '外出期間沒有任何定位紀錄' : '外出中，還沒有定位' };
+  if (r.place_lat != null) { // 有出行地點座標：看外出期間有沒有到那附近（500 公尺內）
+    const near = results.map((p) => ({ t: twClock(p.ms), d: Math.round(distanceM(r.place_lat, r.place_lng, p.lat, p.lng)) }));
+    const hit = near.find((x) => x.d <= 500);
+    if (hit) return { level: 'ok', text: '有到 ' + r.leave_type + '（' + hit.t + '，' + hit.d + ' 公尺內）' };
+    const best = near.reduce((m, x) => (x.d < m.d ? x : m), near[0]);
+    return { level: 'bad', text: '外出期間沒有到 ' + r.leave_type + '（最近一次 ' + best.t + ' 距離 ' + (best.d >= 1000 ? (best.d / 1000).toFixed(1) + ' 公里' : best.d + ' 公尺') + '）' };
+  }
   const key = siteKey(r.leave_type), target = key ? sites.find((x) => siteKey(x.name) && (siteKey(x.name).includes(key) || key.includes(siteKey(x.name)))) : null;
   const where = results.map((p) => { const m = matchSite(sites, p.lat, p.lng); return { t: twClock(p.ms), at: m.at ? m.at.name : null }; });
   const summary = where.map((w) => w.t + ' ' + (w.at || '非案場')).join('、');
@@ -349,8 +387,10 @@ async function apiRequest(req, env) {
     if (!TIME_RE.test(b.time || '') || !TIME_RE.test(b.time_to || '') || b.time_to <= b.time) return json({ error: '請選正確的外出時段' }, 400);
     const place = String(b.place || '').trim().slice(0, 40); if (place.length < 2) return json({ error: '請填要去哪裡' }, 400);
     if (!reason) return json({ error: '請選外出事由' }, 400);
-    await DB.prepare(`INSERT INTO requests (emp_id, kind, date, time, time_to, leave_type, reason, lat, lng, acc, created_ms) VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(emp.id, b.date, b.time, b.time_to, place, reason, isNum(b.lat) ? b.lat : null, isNum(b.lng) ? b.lng : null, isNum(b.acc) ? b.acc : null, Date.now()).run();
+    if (!reason.includes('：') || reason.slice(reason.indexOf('：') + 1).trim().length < 4) return json({ error: '請填寫說明（去做什麼、找誰），沒有說明不予通過' }, 400);
+    const geo = await geocodePlace(env, place);
+    await DB.prepare(`INSERT INTO requests (emp_id, kind, date, time, time_to, leave_type, reason, lat, lng, acc, created_ms, place_lat, place_lng) VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(emp.id, b.date, b.time, b.time_to, place, reason, isNum(b.lat) ? b.lat : null, isNum(b.lng) ? b.lng : null, isNum(b.acc) ? b.acc : null, Date.now(), geo ? geo.lat : null, geo ? geo.lng : null).run();
     const sc = await screenReason(env, reason, 'out', b.date + ' ' + b.time + '–' + b.time_to + '，地點：' + place + '，職稱：' + (((await DB.prepare('SELECT title FROM staff WHERE uid = ?').bind(emp.nueip_uid || '').first()) || {}).title || '未知'));
     if (sc && sc.verdict !== 'ok') {
       const last = await DB.prepare('SELECT id FROM requests WHERE emp_id = ? ORDER BY id DESC LIMIT 1').bind(emp.id).first();
@@ -380,7 +420,7 @@ async function apiBoss(req, env, url) {
   if (req.method === 'POST') { // 立即定位
     const b = await body(req); if (!b) return json({ error: '資料格式錯誤' }, 400);
     const e = await DB.prepare('SELECT id, name, auto_ping FROM employees WHERE id = ?').bind(b.id).first();
-    if (!e || !e.auto_ping) return json({ error: '這個人沒有開啟定位追蹤' }, 400);
+    if (!e) return json({ error: '找不到這個人' }, 404);
     if (!(await trackState(env, e, Date.now())).inWin) return json({ error: '他現在不是上班時段，不能要求定位' }, 400);
     await DB.prepare('UPDATE employees SET locate_req = ? WHERE id = ?').bind(Date.now(), e.id).run();
     await audit(env, emp.name + '（主管查詢）', '要求立即定位', e.name);
@@ -802,8 +842,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
   if (p === '/employees/locate' && M === 'POST') { // 後台要求「立即定位」
     const e = await DB.prepare('SELECT id, auto_ping FROM employees WHERE id = ?').bind(b.id).first();
     if (!e) return json({ error: '找不到這個人' }, 404);
-    if (!e.auto_ping) return json({ error: '這個人沒有設定「幹部定時定位」，請先到員工分頁設定' }, 400);
-    if (!(await trackState(env, e, Date.now())).inWin) return json({ error: e.auto_ping === SHIFT_MODE ? '他現在沒有排班，不能要求定位' : '現在不是他的上班時段（' + e.auto_ping + '），不能要求定位' }, 400);
+    if (!(await trackState(env, e, Date.now())).inWin) return json({ error: !e.auto_ping ? '他沒有開啟定位追蹤，也不在外出申報時段' : e.auto_ping === SHIFT_MODE ? '他現在沒有排班，不能要求定位' : '現在不是他的上班時段（' + e.auto_ping + '），不能要求定位' }, 400);
     const now = Date.now();
     await DB.prepare('UPDATE employees SET locate_req = ? WHERE id = ?').bind(now, b.id).run();
     return json({ ok: true, at: now });

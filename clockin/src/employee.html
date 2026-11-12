@@ -180,14 +180,14 @@
     <div class="seg" id="oDay"><button data-v="0" class="on">今天</button><button data-v="1">明天</button></div>
     <span class="lbl">時間</span>
     <div class="row2"><input type="time" id="oT1" class="fin"><input type="time" id="oT2" class="fin"></div>
-    <span class="lbl">去哪裡（案場名稱或地點）</span><input id="oPlace" class="fin" maxlength="40" list="oSites" placeholder="例：碧波白社區、台北富邦銀行">
+    <span class="lbl">出行地點</span><input id="oPlace" class="fin" maxlength="40" list="oSites" placeholder="案場名稱，或完整地址／店名">
     <datalist id="oSites"></datalist>
     <span class="lbl">事由</span>
     <div class="chips" id="oWhy"><button>巡查案場</button><button>拜訪管委會／客戶</button><button>處理客訴</button><button>支援其他案場</button><button>銀行／公所辦公事</button><button>開會／訓練</button><button>其他</button></div>
-    <span class="lbl">說明（可不填）</span><input id="oNote" class="fin" maxlength="100">
+    <span class="lbl">說明（必填：去做什麼、找誰）</span><input id="oNote" class="fin" maxlength="100" placeholder="例：管委會開會，討論年度合約">
     <button class="main" id="oGo" style="margin-top:18px;font-size:21px;padding:18px">送出申報</button>
     <div class="msg big" id="oMsg"></div>
-    <p class="muted">外出期間系統會比對定位，與申報地點不符會提醒主管。私人事務請改請假。</p>
+    <p class="muted">外出期間系統會自動定位，比對是否真的在申報的出行地點；不符會通報主管。私人事務請改請假。</p>
   </section>
 
   <section class="view" id="vLeave">
@@ -410,6 +410,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   $('oGo').onclick = function () {
     var why = segVal('oWhy'), note = $('oNote').value.trim();
     if (!why) { $('oMsg').className = 'msg big err'; $('oMsg').textContent = '請選外出事由'; return; }
+    if (note.length < 4) { $('oMsg').className = 'msg big err'; $('oMsg').textContent = '請填寫說明（去做什麼、找誰）'; return; }
     var d = new Date(now() + 8 * 3600e3 + (segVal('oDay') === '1' ? 86400e3 : 0)).toISOString().slice(0, 10);
     var b = { kind: 'out', date: d, time: $('oT1').value, time_to: $('oT2').value, place: $('oPlace').value.trim(), reason: why + (note ? '：' + note : '') };
     $('oGo').disabled = true; $('oMsg').className = 'msg big'; $('oMsg').textContent = '送出中…';
