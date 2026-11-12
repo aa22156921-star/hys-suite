@@ -255,7 +255,7 @@ if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExtern
   function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
 
   function enterMain() {
-    show('vMain'); $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.6em;font-weight:500;color:var(--muted);margin-left:6px'; $('who').appendChild(sn); }
+    show('vMain'); $('who').textContent = me.name; if (me.empNo) { var sn = document.createElement('small'); sn.textContent = me.empNo; sn.style.cssText = 'font-size:.8em;margin-left:6px'; $('who').appendChild(sn); }
     var box = $('shifts'); box.innerHTML = '';
     $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
     me.upcoming.forEach(function (s) {
