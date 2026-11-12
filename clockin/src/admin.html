@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>洪英打卡 後台</title>
+<link rel="icon" href="/fav-64.png">
+<style>
+  :root { --brand:#0f766e; --bg:#f4f6f5; --text:#1c2421; --muted:#5f6b67; --line:#e2e8e6; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:1200px; margin:0 auto; padding:16px 14px 60px; }
+  h1 { font-size:21px; margin:4px 0 14px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .card { background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); margin-bottom:14px; }
+  input, select, button, textarea { font-size:15px; padding:9px 11px; border:1px solid #cfd8d5; border-radius:8px; background:#fff; color:var(--text); font-family:inherit; }
+  textarea { width:100%; min-height:110px; }
+  button { cursor:pointer; white-space:nowrap; }
+  button.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+  button.danger { color:var(--bad); }
+  button.sm { padding:5px 9px; font-size:13px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  .row label { font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; padding-bottom:4px; }
+  .tabs button { border-radius:999px; }
+  .tabs button.on { background:var(--text); color:#fff; border-color:var(--text); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 7px; border-bottom:1px solid var(--line); white-space:nowrap; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:13px; background:#fafbfb; position:sticky; top:0; }
+  .scroll { overflow:auto; max-height:70vh; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+  .t-ok { background:#dcfce7; color:var(--ok); } .t-late, .t-far { background:#fef3c7; color:var(--warn); }
+  .t-missing { background:#fee2e2; color:var(--bad); } .t-pending { background:#eef2f1; color:var(--muted); }
+  .stats { display:flex; gap:22px; flex-wrap:wrap; margin:2px 0 12px; font-size:13px; color:var(--muted); }
+  .stats b { font-size:20px; color:var(--text); display:block; }
+  .muted { color:var(--muted); font-size:13px; line-height:1.6; }
+  .msg { font-size:14px; margin-top:8px; white-space:pre-line; }
+  .msg.err { color:var(--bad); } .msg.ok { color:var(--ok); }
+  a { color:var(--brand); }
+  .grid td { padding:2px; } .grid th { padding:6px 4px; text-align:center; }
+  .grid input { width:46px; padding:5px 2px; text-align:center; font-size:13px; border-color:#e2e8e6; }
+  .grid input.chg { background:#fef9c3; border-color:#eab308; }
+  .grid .we { background:#fdf2f2; }
+  .grid td.name { position:sticky; left:0; background:#fff; font-weight:600; padding:4px 8px; z-index:1; }
+  .sec { display:none; }
+  @media print { body > main > *:not(#qrBox) { display:none !important; } #qrBox { position:static !important; padding-top:40px !important; } .noprint { display:none !important; } #qrImg { max-width:360px !important; } }
+  code { background:#eef2f1; padding:1px 6px; border-radius:5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="/icon-180.png" alt="" style="width:34px;height:34px;vertical-align:-8px;margin-right:8px">洪英 整合後台</h1>
+  <div style="margin:-4px 0 12px;display:flex;gap:8px;flex-wrap:wrap"><a class="tag t-ok" style="text-decoration:none;padding:6px 12px" href="/hr/">人事建檔</a><a class="tag t-ok" style="text-decoration:none;padding:6px 12px" href="/pay">薪資查詢</a></div>
+
+  <div class="card" id="login">
+    <div class="row">
+      <label>管理密碼<input id="key" type="password" autocomplete="current-password"></label>
+      <button class="primary" id="loginBtn">登入</button>
+    </div>
+    <div class="msg err" id="loginMsg"></div>
+  </div>
+
+  <div id="qrBox" style="display:none;position:fixed;inset:0;background:#fff;z-index:50;overflow:auto;text-align:center;padding:24px 16px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:28px">
+      <div style="flex:1;min-width:260px;max-width:400px">
+        <div style="font-size:30px;font-weight:800;margin:8px 0 4px">iPhone</div>
+        <div id="qrImg" style="margin:14px auto"></div>
+        <div id="qrUrl" class="muted" style="font-size:13px;word-break:break-all"></div>
+      </div>
+      <div id="apkCol" style="flex:1;min-width:260px;max-width:400px;display:none">
+        <div style="font-size:30px;font-weight:800;margin:8px 0 4px">安卓</div>
+        <div id="qrApk" style="margin:14px auto"></div>
+        <div id="apkUrl" class="muted" style="font-size:13px;word-break:break-all"></div>
+      </div>
+    </div>
+    <p class="muted" style="max-width:640px;margin:12px auto 0;font-size:15px">第一次打開：同意定位 → 輸入自己的姓名。iPhone 請用 Safari 開，先「加入主畫面」再從桌面圖示打開。<br>
+      <span id="apkHint" style="display:none">安卓安裝時如果出現「禁止安裝不明來源」，請按「設定 → 允許這個來源」再安裝。</span></p>
+    <div class="row noprint" style="justify-content:center;margin-top:16px">
+      <button class="primary" id="qrPrint">列印</button>
+      <button id="qrDl">下載圖片</button>
+      <button id="qrCopy">複製網址</button>
+      <button id="qrClose">關閉</button>
+    </div>
+    <p class="muted noprint">這個 QR Code 只在後台顯示，員工頁面看不到。</p>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="tabs" id="tabs">
+      <button data-t="today" class="on">今日異常</button>
+      <button data-t="req">申請核准 <span id="reqBadge" class="tag t-missing" style="display:none"></span></button>
+      <button data-t="report">出勤報表</button>
+      <button data-t="sched">班表</button>
+      <button data-t="emp">員工</button>
+      <button data-t="staff">人事名冊</button>
+      <button data-t="shift">班別</button>
+      <button data-t="site">工地</button>
+      <button data-t="ping">定位紀錄</button>
+      <button data-t="app">App 人員定位</button>
+      <button data-t="audit">操作紀錄</button>
+      <button id="qrBtn" style="margin-left:auto;background:#0f766e;color:#fff;border-color:#0f766e">▦ 打卡 QR Code</button>
+    </div>
+
+    <!-- 今日異常 -->
+    <section class="sec" id="s-today">
+      <div class="card">
+        <div class="row"><label>日期<input type="date" id="tDate"></label><button class="primary" id="tLoad">重新整理</button><span class="muted" id="tMsg"></span></div>
+        <div class="stats" id="tStats" style="margin-top:10px"></div>
+      </div>
+      <div class="card" id="tPendWrap" style="display:none"><h2 style="margin-top:0">待核准申請 <span id="tPendN"></span></h2><div class="scroll"><table><tbody id="tPend"></tbody></table></div></div>
+      <div class="card"><h2 style="margin-top:0">需要處理的出勤</h2>
+        <p class="muted" style="margin:0 0 8px">只列出異常；正常到班的不會出現在這裡。包含昨天跨夜的班。</p>
+        <div class="scroll"><table><thead><tr><th>狀況</th><th>日期</th><th>姓名</th><th>班別</th><th>案場</th></tr></thead><tbody id="tRows"></tbody></table></div></div>
+      <div class="card" id="tTodo" style="display:none"><h2 style="margin-top:0">資料待補</h2><div id="tTodoBody" class="muted"></div></div>
+    </section>
+
+    <!-- 申請核准 -->
+    <section class="sec" id="s-req">
+      <div class="card">
+        <div class="row"><select id="qStatus"><option value="pending">待核准</option><option value="approved">已核准</option><option value="rejected">已退回</option><option value="all">全部</option></select>
+          <button class="primary" id="qLoad">查詢</button><button id="qCsv">匯出（給人資登錄 NUEIP）</button><span class="muted" id="qMsg"></span></div>
+        <p class="muted" style="margin:8px 0 0">員工從手機送出補卡、請假，預設由他在 NUEIP 的部門主管核准；管理員可以代為核准。核准的補卡會直接算進出勤報表。</p>
+      </div>
+      <div class="card"><div class="scroll"><table><thead><tr><th>申請時間</th><th>姓名</th><th>類型</th><th>內容</th><th>原因</th><th>送出位置</th><th>狀態</th><th></th></tr></thead><tbody id="qRows"></tbody></table></div></div>
+    </section>
+
+    <!-- 操作紀錄 -->
+    <section class="sec" id="s-staff">
+      <div class="card"><div class="row"><input id="stQ" placeholder="搜尋姓名、員編、案場、職稱" style="min-width:220px"><button class="primary" id="stLoad">重新整理</button>
+        <button id="stMerge">名冊對應員工</button><button id="stCsv">匯出 Excel</button><span class="muted" id="stMsg"></span></div>
+        <p class="muted" style="margin:8px 0 0">每天早上從 NUEIP 複製一份（員編、姓名、部門、職稱、到職日），只讀不改 NUEIP。員工第一次打開打卡要輸入「姓名＋員編」，名冊對得上才能綁定。</p>
+        <div class="stats" id="stStats" style="margin-top:10px"></div></div>
+      <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
+    </section>
+
+    <section class="sec" id="s-audit">
+      <div class="card"><div class="row"><button class="primary" id="aLoad2">重新整理</button><span class="muted">誰在什麼時間做了什麼，只能看、不能改。最近 500 筆。</span></div></div>
+      <div class="card"><div class="scroll"><table><thead><tr><th>時間</th><th>誰</th><th>動作</th><th>內容</th></tr></thead><tbody id="auRows"></tbody></table></div></div>
+    </section>
+
+    <!-- 出勤報表 -->
+    <section class="sec" id="s-report">
+      <div class="card"><div class="row">
+        <label>起日<input type="date" id="rFrom"></label>
+        <label>迄日<input type="date" id="rTo"></label>
+        <label>姓名<input id="rName" placeholder="全部" size="8"></label>
+        <label>顯示<select id="rOnly"><option value="">全部</option><option value="bad">只看異常</option></select></label>
+        <button class="primary" id="rLoad">查詢</button>
+        <button id="rCsv">下載 CSV</button>
+        <button class="primary" id="rNue">匯出 NUEIP 檔</button>
+      </div></div>
+      <div class="card">
+        <div class="stats" id="rStats"></div>
+        <div class="scroll"><table>
+          <thead><tr><th>日期</th><th>姓名</th><th>班別</th><th>工地</th><th>上班</th><th>上班位置</th><th>下班</th><th>下班位置</th></tr></thead>
+          <tbody id="rRows"></tbody>
+        </table></div>
+        <div id="uWrap" style="display:none;margin-top:18px">
+          <h2>有定位、但當天沒有排班</h2>
+          <p class="muted" style="margin-top:0">可能是代班、加班、班表漏排，或名字和班表對不上。</p>
+          <div class="scroll"><table><thead><tr><th>日期</th><th>姓名</th><th>第一次</th><th>最後一次</th><th>次數</th><th>位置</th></tr></thead><tbody id="uRows"></tbody></table></div>
+        </div>
+        <p class="muted">判定：上下班時間前後 <b>15 分鐘</b>內有打開頁面＝正常；上班時段過後才出現＝遲到；都沒有＝未打卡。位置超出工地範圍會標「範圍外」。時間一律以伺服器為準。</p>
+      </div>
+    </section>
+
+    <!-- 班表 -->
+    <section class="sec" id="s-sched">
+      <div class="card">
+        <div class="row">
+          <label>月份<input type="month" id="mMonth"></label>
+          <button class="primary" id="mLoad">載入</button>
+          <button id="mSave">儲存變更</button>
+        </div>
+        <div class="msg" id="mMsg"></div>
+        <p class="muted">每格填班別代號，空白＝休假。若當天在別的工地，寫成 <code>早@信義A</code>。黃色格子＝尚未儲存。</p>
+        <div class="scroll"><table class="grid" id="mGrid"></table></div>
+      </div>
+      <div class="card">
+        <h2>匯入月班表</h2>
+        <p class="muted">格式：第一欄是姓名，標題列是日期（1、2、3…或 11/1、11/2…），格子裡是班別代號。<br>
+          可以選 Excel / CSV 檔，或從 Excel、Google 試算表整塊複製貼到下面。照片或其他格式的班表，傳給 Claude 轉換即可。</p>
+        <div class="row">
+          <label>匯入到月份<input type="month" id="iMonth"></label>
+          <label>檔案<input type="file" id="iFile" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+        </div>
+        <textarea id="iText" placeholder="或把班表整塊貼在這裡" style="margin-top:10px"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="iParse">預覽</button>
+          <button class="primary" id="iGo" disabled>確認匯入</button>
+        </div>
+        <div class="msg" id="iMsg"></div>
+      </div>
+    </section>
+
+    <!-- 員工 -->
+    <section class="sec" id="s-emp">
+      <div class="card">
+        <h2>新增員工</h2>
+        <div class="row">
+          <label style="flex:1;min-width:220px">姓名（一行一位，可一次貼很多）<textarea id="eNames" style="min-height:80px"></textarea></label>
+          <label>預設工地<select id="eSite"></select></label>
+          <button class="primary" id="eAdd">新增</button>
+        </div>
+        <div class="msg" id="eMsg"></div>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-bottom:8px"><button class="primary" id="eShare">複製 iPhone 連結</button><button class="primary" id="eShareA">複製安卓連結</button><span class="muted" id="eShareMsg"></span></div>
+        <div class="row" style="margin-bottom:8px"><label>安卓 App（.apk）<input type="file" id="apkFile" accept=".apk"></label><button id="apkUp">上架 App</button> <button id="apkPull" title="舊網址的打卡 App 也會自動升級成整合版">上架 GitHub 最新整合版</button><span class="muted" id="apkMsg"></span></div>
+        <p class="muted" style="margin-top:0">把網址傳給員工，員工輸入自己的姓名就會和手機綁定。「自行登記」＝名字不在你建立的名單裡，請確認是否打錯字或不是員工。每人預設最多綁 2 台裝置（例如手機＋電腦）。換手機時按「解除綁定」會清除全部裝置。<br>「幹部定時定位」：填 <code>1-5 09:00,12:00,18:00</code> ＝週一到五這三個時間自動定位一次（需安裝安卓 App；iPhone 網頁版只能打開時記錄）。<br>「外勤」打勾＝幹部、督導、機動人員：不比對案場，只記時間與實際位置。有填定時定位的人也自動視為外勤。</p>
+        <div class="scroll"><table>
+          <thead><tr><th>姓名</th><th>NUEIP 員編</th><th>幹部定時定位</th><th>外勤</th><th>預設工地</th><th>狀態</th><th>裝置</th><th>綁定時間</th><th>最後定位</th><th></th></tr></thead>
+          <tbody id="eRows"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- 班別 -->
+    <section class="sec" id="s-shift">
+      <div class="card">
+        <div class="row">
+          <label>代號（班表上寫的字）<input id="fCode" placeholder="早" size="6"></label>
+          <label>名稱<input id="fName" placeholder="早班" size="8"></label>
+          <label>上班<input type="time" id="fStart" value="08:00"></label>
+          <label>下班<input type="time" id="fEnd" value="17:00"></label>
+          <button class="primary" id="fSave">新增 / 更新</button>
+        </div>
+        <div class="msg" id="fMsg"></div>
+        <p class="muted">下班時間比上班早會自動當成跨夜班（例：22:00–06:00）。代號相同會更新。</p>
+      </div>
+      <div class="card"><table><thead><tr><th>代號</th><th>名稱</th><th>時間</th><th></th></tr></thead><tbody id="fRows"></tbody></table></div>
+    </section>
+
+    <!-- 工地 -->
+    <section class="sec" id="s-site">
+      <div class="card">
+        <div class="row">
+          <label>工地名稱<input id="sName" placeholder="信義A"></label>
+          <label>經緯度（從 Google 地圖複製）<input id="sCoord" placeholder="25.0330, 121.5654" size="22"></label>
+          <label>範圍（公尺）<input id="sRadius" type="number" value="200" style="width:100px"></label>
+          <button class="primary" id="sAdd">儲存</button>
+          <button id="sCancel" style="display:none">取消編輯</button>
+        </div>
+        <div class="msg" id="sMsg"></div>
+        <p class="muted">Google 地圖：電腦按右鍵、手機長按工地位置，點最上面的數字即可複製經緯度。</p>
+      </div>
+      <div class="card">
+        <h2>批次匯入工地</h2>
+        <p class="muted" style="margin-top:0">一行一個工地：<code>名稱, 緯度, 經度</code>，最後可以再加範圍公尺數。可以從 Excel 整塊複製貼上（名稱、緯度、經度各一欄）。名稱已存在的會更新座標。<br>例：<code>遠雄大未來, 25.078484, 121.375648</code>　或　<code>智匯學 25.046745,121.389753 300</code></p>
+        <textarea id="bText" placeholder="遠雄大未來, 25.078484, 121.375648&#10;金捷市, 25.046637, 121.384414, 250"></textarea>
+        <div class="row" style="margin-top:10px">
+          <label>沒寫範圍時預設（公尺）<input id="bRadius" type="number" value="200" style="width:100px"></label>
+          <button id="bParse">預覽</button>
+          <button class="primary" id="bGo" disabled>確認匯入</button>
+        </div>
+        <div class="msg" id="bMsg"></div>
+        <div class="scroll" id="bPrev" style="display:none;margin-top:8px"><table><thead><tr><th>#</th><th>名稱</th><th>經緯度</th><th>範圍</th><th>狀態</th></tr></thead><tbody id="bRows"></tbody></table></div>
+      </div>
+      <div class="card"><table><thead><tr><th>工地</th><th>經緯度</th><th>範圍</th><th></th></tr></thead><tbody id="sRows"></tbody></table></div>
+    </section>
+
+    <!-- 定位紀錄 -->
+    <section class="sec" id="s-ping">
+      <div class="card"><div class="row">
+        <label>日期<input type="date" id="pDate"></label>
+        <button class="primary" id="pLoad">查詢</button>
+      </div></div>
+      <div class="card scroll"><table><thead><tr><th>時間</th><th>姓名</th><th>對應上班地點</th><th>位置</th><th>誤差</th><th>IP</th></tr></thead><tbody id="pRows"></tbody></table></div>
+    </section>
+
+    <!-- 安卓 App 人員定位 -->
+    <section class="sec" id="s-app">
+      <div class="card">
+        <div class="row"><button class="primary" id="aLoad">重新整理</button><span class="muted" id="aMsg"></span></div>
+        <p class="muted" style="margin:8px 0 0">列出有安裝安卓 App 並綁定的人。按姓名可看他當天的定位軌跡與地圖。<br>「立即定位」：只在他的上班時段（定時定位的第一個到最後一個時間）可以按；安卓 App 約 10 分鐘內回報，iPhone 捷徑在下個整點（或他打開 LINE 時）回報。</p>
+        <div class="scroll" style="margin-top:8px"><table>
+          <thead><tr><th>姓名</th><th>員編</th><th>定時定位</th><th>最後定位</th><th>位置</th><th>App</th><th>立即定位</th></tr></thead>
+          <tbody id="aRows"></tbody>
+        </table></div>
+      </div>
+      <div class="card" id="aDetail" style="display:none">
+        <div class="row">
+          <h2 id="aName" style="margin:0 auto 0 0"></h2>
+          <label>日期<input type="date" id="aDate"></label>
+          <button class="primary" id="aDay">查詢</button>
+        </div>
+        <iframe id="aMap" style="width:100%;height:340px;border:0;border-radius:10px;margin-top:10px;background:#eef2f1" loading="lazy" referrerpolicy="no-referrer"></iframe>
+        <div class="scroll" style="margin-top:8px"><table><thead><tr><th>時間</th><th>對應上班地點</th><th>位置</th><th>誤差</th></tr></thead><tbody id="aPings"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = ''; try { KEY = sessionStorage.getItem('ck_admin') || ''; } catch (e) {}
+  var SITES = [], SHIFTS = [], EMPS = [];
+
+  function api(path, data) {
+    var opt = { headers: { 'X-Admin-Key': KEY, 'Content-Type': 'application/json' } };
+    if (data !== undefined) { opt.method = 'POST'; opt.body = JSON.stringify(data); }
+    return fetch('/api/admin' + path, opt).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (r.status === 401) { logout('密碼錯誤'); throw new Error('401'); }
+        if (!r.ok) { var e = new Error(d.error || ('HTTP ' + r.status)); e.data = d; throw e; }
+        return d;
+      });
+    });
+  }
+  function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+  function td(tr, content) { var c = el('td'); if (content instanceof Node) c.appendChild(content); else if (content != null) c.textContent = content; tr.appendChild(c); return c; }
+  function msg(id, text, kind) { $(id).textContent = text || ''; $(id).className = 'msg ' + (kind || ''); }
+  function mapLink(lat, lng, text) { var a = el('a', text); a.href = 'https://www.google.com/maps?q=' + lat + ',' + lng; a.target = '_blank'; a.rel = 'noopener'; return a; }
+  function today() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+  function confirmBtn(label, cls, fn) { var b = el('button', label, 'sm ' + (cls || '')); b.onclick = function () { if (b.dataset.c !== '1') { b.dataset.c = '1'; b.textContent = '確定？'; setTimeout(function () { b.dataset.c = ''; b.textContent = label; }, 4000); return; } fn(); }; return b; }
+  function copyText(t, cb) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(cb, function () { var x = el('textarea'); x.value = t; document.body.appendChild(x); x.select(); try { document.execCommand('copy'); } catch (e) {} x.remove(); cb(); }); }
+  function err(id) { return function (e) { if (e.message !== '401') msg(id, e.message, 'err'); }; }
+
+  // ---------- 登入 ----------
+  function logout(m) { KEY = ''; try { sessionStorage.removeItem('ck_admin'); } catch (e) {} $('app').style.display = 'none'; $('login').style.display = ''; $('loginMsg').textContent = m || ''; }
+  $('loginBtn').onclick = function () { KEY = $('key').value; api('/sites').then(function () { try { sessionStorage.setItem('ck_admin', KEY); } catch (e) {} enter(); }).catch(function () {}); };
+  $('key').onkeydown = function (e) { if (e.key === 'Enter') $('loginBtn').click(); };
+  function enter() { $('login').style.display = 'none'; $('app').style.display = ''; refreshBase().then(function () { tab('today'); }); }
+  function refreshBase() {
+    return Promise.all([api('/sites'), api('/shifts'), api('/employees')]).then(function (r) { SITES = r[0].sites; SHIFTS = r[1].shifts; EMPS = r[2].employees; });
+  }
+
+  // ---------- 分頁 ----------
+  var loaders = {};
+  function tab(t) {
+    Array.prototype.forEach.call($('tabs').children, function (b) { b.className = b.dataset.t === t ? 'on' : ''; });
+    ['today', 'req', 'report', 'sched', 'emp', 'staff', 'shift', 'site', 'ping', 'app', 'audit'].forEach(function (s) { $('s-' + s).style.display = s === t ? 'block' : 'none'; });
+    if (loaders[t]) loaders[t]();
+  }
+  Array.prototype.forEach.call($('tabs').children, function (b) { b.onclick = function () { tab(b.dataset.t); }; });
+
+  // ---------- 今日異常 ----------
+  $('tDate').value = today();
+  function decideBtns(r, after) {
+    var w = el('span'); if (r.status !== 'pending') return w;
+    var ok = el('button', '核准', 'primary sm'), no = el('button', '退回', 'sm');
+    var go = function (yes) { ok.disabled = no.disabled = true; api('/requests/decide', { id: r.id, ok: yes, note: '' }).then(after).catch(function (x) { alert(x.message); after(); }); };
+    ok.onclick = function () { go(true); }; no.onclick = function () { if (no.textContent !== '確定退回') { no.textContent = '確定退回'; return; } go(false); };
+    w.appendChild(ok); w.appendChild(document.createTextNode(' ')); w.appendChild(no); return w;
+  }
+  loaders.today = function () {
+    $('tMsg').textContent = '載入中…';
+    api('/exceptions?date=' + $('tDate').value).then(function (d) {
+      $('tMsg').textContent = '';
+      var s = $('tStats'); s.innerHTML = '';
+      [['今天排班', d.summary.scheduled], ['已到班', d.summary.arrived], ['需處理', d.items.length], ['待核准', d.pending.length]]
+        .forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); s.appendChild(dv); });
+      $('reqBadge').style.display = d.pending.length ? '' : 'none'; $('reqBadge').textContent = d.pending.length;
+      $('tPendWrap').style.display = d.pending.length ? '' : 'none'; $('tPendN').textContent = '（' + d.pending.length + '）';
+      var pb = $('tPend'); pb.innerHTML = '';
+      d.pending.forEach(function (r) { var tr = el('tr'); td(tr, r.name); td(tr, r.kindName + '：' + r.text); td(tr, r.reason || ''); td(tr, r.at || (r.lat != null ? '無對應案場' : '沒有定位')); td(tr, decideBtns(r, loaders.today)); pb.appendChild(tr); });
+      var tb = $('tRows'); tb.innerHTML = '';
+      d.items.forEach(function (it) {
+        var tr = el('tr'); td(tr, el('span', it.what, 'tag ' + (it.level === 'red' ? 't-missing' : 't-late'))); td(tr, it.date.slice(5).replace('-', '/'));
+        td(tr, it.name); td(tr, it.shift + ' ' + it.start + '–' + it.end); td(tr, it.site); tb.appendChild(tr);
+      });
+      if (!d.items.length) { var tr = el('tr'); var c = td(tr, '沒有異常 👍'); c.colSpan = 5; c.className = 'muted'; tb.appendChild(tr); }
+      var todo = [];
+      if (d.noEmpNo.length) todo.push('沒有 NUEIP 員編（無法匯入）：' + d.noEmpNo.join('、'));
+      if (d.noSiteDepts.length) todo.push('NUEIP 案場還沒有工地座標（到「工地」新增，名稱相同即可）：' + d.noSiteDepts.join('、'));
+      $('tTodo').style.display = todo.length ? '' : 'none'; $('tTodoBody').innerHTML = ''; todo.forEach(function (t) { $('tTodoBody').appendChild(el('p', t)); });
+    }).catch(err('tMsg'));
+  };
+  $('tLoad').onclick = loaders.today;
+
+  // ---------- 申請核准 ----------
+  var lastReqs = [];
+  loaders.req = function () {
+    $('qMsg').textContent = '載入中…';
+    api('/requests?status=' + $('qStatus').value).then(function (d) {
+      lastReqs = d.requests; $('qMsg').textContent = '共 ' + d.requests.length + ' 筆';
+      var tb = $('qRows'); tb.innerHTML = '';
+      d.requests.forEach(function (r) {
+        var tr = el('tr'); td(tr, r.created); td(tr, r.name); td(tr, r.kindName); td(tr, r.text); td(tr, r.reason || '');
+        var loc = el('span'); if (r.lat != null) { loc.appendChild(document.createTextNode((r.at || '無對應案場') + ' ')); loc.appendChild(mapLink(r.lat, r.lng, '地圖')); } else loc.textContent = '沒有定位';
+        td(tr, loc);
+        td(tr, el('span', r.statusName + (r.decided_by ? '（' + r.decided_by + '）' : ''), 'tag ' + (r.status === 'approved' ? 't-ok' : r.status === 'pending' ? 't-late' : 't-missing')));
+        td(tr, decideBtns(r, loaders.req)); tb.appendChild(tr);
+      });
+      if (!d.requests.length) { var tr = el('tr'); var c = td(tr, '沒有申請'); c.colSpan = 8; c.className = 'muted'; tb.appendChild(tr); }
+    }).catch(err('qMsg'));
+  };
+  $('qLoad').onclick = loaders.req; $('qStatus').onchange = loaders.req;
+  $('qCsv').onclick = function () {
+    var head = ['員工編號', '姓名', '類型', '假別', '開始日期', '結束日期', '上下班', '時間起', '時間迄', '原因', '狀態', '核准人', '核准時間'];
+    var lines = [head].concat(lastReqs.map(function (r) {
+      return [r.emp_no || '', r.name, r.kindName, r.leave_type || '', r.date, r.date_to || r.date, r.io === 'in' ? '上班' : r.io === 'out' ? '下班' : '', r.time || '', r.time_to || '', r.reason || '', r.statusName, r.decided_by || '', r.decided || ''];
+    })).map(function (row) { return row.map(function (v) { v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }).join(','); });
+    var a = el('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    a.download = '補卡請假_' + $('qStatus').value + '_' + today() + '.csv'; a.click();
+  };
+
+  // ---------- 操作紀錄 ----------
+  loaders.audit = function () {
+    api('/audit').then(function (d) {
+      var tb = $('auRows'); tb.innerHTML = '';
+      d.audit.forEach(function (a) { var tr = el('tr'); td(tr, a.when); td(tr, a.actor); td(tr, a.action); var c = td(tr, a.detail || ''); c.style.maxWidth = '480px'; c.style.wordBreak = 'break-all'; tb.appendChild(tr); });
+      if (!d.audit.length) { var tr = el('tr'); var c = td(tr, '還沒有紀錄'); c.colSpan = 4; c.className = 'muted'; tb.appendChild(tr); }
+    });
+  };
+  $('aLoad2').onclick = loaders.audit;
+
+  // ---------- 人事名冊 ----------
+  var STAFF = [];
+  function staffRows() {
+    var q = $('stQ').value.trim().toUpperCase(), tb = $('stRows'); tb.innerHTML = '';
+    var list = STAFF.filter(function (r) { return !q || (r.emp_no + r.name + (r.dept_name || '') + (r.title || '')).toUpperCase().indexOf(q) >= 0; });
+    list.slice(0, 600).forEach(function (r) {
+      var tr = el('tr'); td(tr, r.emp_no); td(tr, r.name); td(tr, r.dept_name || ''); td(tr, r.title || ''); td(tr, r.arrive || '');
+      td(tr, el('span', r.devices > 0 ? '已綁定' : r.emp_id ? '已建立未綁定' : '未加入', 'tag ' + (r.devices > 0 ? 't-ok' : r.emp_id ? 't-late' : 't-pending')));
+      tb.appendChild(tr);
+    });
+    if (!list.length) { var tr = el('tr'); var c = td(tr, STAFF.length ? '找不到' : '名冊還是空的，等每天早上同步'); c.colSpan = 6; c.className = 'muted'; tb.appendChild(tr); }
+  }
+  loaders.staff = function () {
+    api('/staff').then(function (d) {
+      STAFF = d.staff;
+      var bound = STAFF.filter(function (r) { return r.devices > 0; }).length;
+      var st = $('stStats'); st.innerHTML = '';
+      [['名冊人數', STAFF.length], ['已綁定打卡', bound], ['尚未綁定', STAFF.length - bound]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
+      $('stMsg').textContent = d.synced ? '最後同步 ' + d.synced : '';
+      staffRows();
+    });
+  };
+  $('stLoad').onclick = loaders.staff;
+  $('stQ').oninput = staffRows;
+  $('stMerge').onclick = function () { api('/staff/merge', {}).then(function (d) { $('stMsg').textContent = '補上 ' + d.merged + ' 位員工的員編'; loaders.staff(); }); };
+  $('stCsv').onclick = function () {
+    var rows = [['員編', '姓名', '部門／案場', '職稱', '到職日', '打卡綁定']].concat(STAFF.map(function (r) { return [r.emp_no, r.name, r.dept_name || '', r.title || '', r.arrive || '', r.devices > 0 ? '已綁定' : '未綁定']; }));
+    var csv = '\ufeff' + rows.map(function (r) { return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = '人事名冊.csv'; a.click();
+  };
+
+  // ---------- 出勤報表 ----------
+  var ST = { ok: ['正常', 't-ok'], late: ['遲到', 't-late'], missing: ['未打卡', 't-missing'], pending: ['未到時間', 't-pending'], leave: ['請假', 't-pending'] };
+  var lastReport = [];
+  $('rFrom').value = $('rTo').value = today();
+  function statusCell(st, p) {
+    var w = el('span'); var s = ST[st]; w.appendChild(el('span', s[0] + (st === 'late' && p ? ' ' + p.lateMin + ' 分' : ''), 'tag ' + s[1]));
+    if (p) w.appendChild(document.createTextNode(' ' + p.time)); return w;
+  }
+  function posCell(p) {
+    if (!p) return '';
+    var w = el('span');
+    w.appendChild(document.createTextNode((p.at || '無對應上班地點') + ' '));
+    w.appendChild(mapLink(p.lat, p.lng, p.dist != null ? p.dist + ' m' : '地圖'));
+    if (p.inRange === false) { w.appendChild(document.createTextNode(' ')); w.appendChild(el('span', '範圍外', 'tag t-far')); }
+    return w;
+  }
+  function isBad(r) { return r.inStatus === 'late' || r.inStatus === 'missing' || r.outStatus === 'missing' || (r.in && r.in.inRange === false) || (r.out && r.out.inRange === false); }
+  loaders.report = function () {
+    var q = '?from=' + $('rFrom').value + '&to=' + ($('rTo').value || $('rFrom').value);
+    api('/report' + q).then(function (d) {
+      var name = $('rName').value.trim(), only = $('rOnly').value;
+      var rows = d.report.filter(function (r) { return (!name || r.name.indexOf(name) >= 0) && (!only || isBad(r)); });
+      lastReport = rows;
+      var tb = $('rRows'); tb.innerHTML = '';
+      rows.forEach(function (r) {
+        var tr = el('tr'); td(tr, r.date.slice(5).replace('-', '/')); td(tr, r.name); td(tr, r.shift + ' ' + r.start + '–' + r.end); td(tr, r.site);
+        td(tr, statusCell(r.inStatus, r.in)); td(tr, posCell(r.in)); td(tr, statusCell(r.outStatus, r.out)); td(tr, posCell(r.out)); tb.appendChild(tr);
+      });
+      if (!rows.length) { var tr = el('tr'); var c = td(tr, d.report.length ? '沒有符合的資料' : '這段期間沒有排班。請先到「班表」匯入班表。'); c.colSpan = 8; c.className = 'muted'; tb.appendChild(tr); }
+      var ub = $('uRows'); ub.innerHTML = '';
+      var us = (d.unscheduled || []).filter(function (u) { return !name || u.name.indexOf(name) >= 0; });
+      us.forEach(function (u) {
+        var tr = el('tr'); td(tr, u.date.slice(5).replace('-', '/')); td(tr, u.name); td(tr, u.first); td(tr, u.last); td(tr, u.count);
+        var w = el('span'); w.appendChild(document.createTextNode((u.at || '無對應上班地點') + ' ')); w.appendChild(mapLink(u.lat, u.lng, u.dist != null ? u.dist + ' m' : '地圖')); td(tr, w);
+        ub.appendChild(tr);
+      });
+      $('uWrap').style.display = us.length ? '' : 'none';
+      var all = d.report, cnt = function (f) { return all.filter(f).length; };
+      var s = $('rStats'); s.innerHTML = '';
+      [['排班', all.length], ['上班正常', cnt(function (r) { return r.inStatus === 'ok'; })], ['遲到', cnt(function (r) { return r.inStatus === 'late'; })],
+       ['上班未打卡', cnt(function (r) { return r.inStatus === 'missing'; })], ['下班未打卡', cnt(function (r) { return r.outStatus === 'missing'; })],
+       ['範圍外', cnt(function (r) { return (r.in && r.in.inRange === false) || (r.out && r.out.inRange === false); })]]
+        .forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); s.appendChild(dv); });
+    }).catch(err('rStats'));
+  };
+  $('rLoad').onclick = loaders.report;
+  $('rCsv').onclick = function () {
+    var L = function (s, p) { return ST[s][0] + (s === 'late' && p ? p.lateMin + '分' : ''); };
+    var head = ['日期', '姓名', '班別', '上班', '下班', '班表工地', '上班狀態', '上班時間', '上班定位地點', '上班距離(m)', '上班範圍', '下班狀態', '下班時間', '下班定位地點', '下班距離(m)', '下班範圍', '上班座標', '下班座標'];
+    var lines = [head].concat(lastReport.map(function (r) {
+      var i = r.in || {}, o = r.out || {};
+      var AT = function (x) { return x.time ? (x.at || '無對應上班地點') : ''; };
+      return [r.date, r.name, r.shift, r.start, r.end, r.site, L(r.inStatus, r.in), i.time || '', AT(i), i.dist != null ? i.dist : '', i.inRange == null ? '' : (i.inRange ? '內' : '外'),
+              L(r.outStatus, r.out), o.time || '', AT(o), o.dist != null ? o.dist : '', o.inRange == null ? '' : (o.inRange ? '內' : '外'),
+              i.lat ? i.lat + ',' + i.lng : '', o.lat ? o.lat + ',' + o.lng : ''];
+    })).map(function (row) { return row.map(function (v) { v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }).join(','); });
+    var a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    a.download = '出勤_' + $('rFrom').value + '_' + $('rTo').value + '.csv'; a.click();
+  };
+
+  // ---------- 匯出 NUEIP（姓名／案場／時間／是否到班）----------
+  $('rNue').onclick = function () {
+    if (!lastReport.length) { alert('先按「查詢」找出要匯出的日期'); return; }
+    var JUDGE = function (r) {
+      if (r.inStatus === 'leave' && r.outStatus === 'leave') return '請假（' + r.leave + '）';
+      if (r.inStatus === 'pending' && r.outStatus === 'pending') return '未到時間';
+      if (r.inStatus === 'missing' && r.outStatus === 'missing') return '未到班';
+      var bad = [];
+      if (r.inStatus === 'late') bad.push('遲到' + (r.in && r.in.lateMin ? r.in.lateMin + '分' : ''));
+      if (r.inStatus === 'missing') bad.push('上班未打卡');
+      if (r.outStatus === 'missing') bad.push('下班未打卡');
+      if ((r.in && r.in.inRange === false) || (r.out && r.out.inRange === false)) bad.push('不在案場範圍');
+      return bad.length ? bad.join('、') : '符合';
+    };
+    var rows = [['日期', '員工編號', '姓名', '案場', '班別', '表定上班', '表定下班', '上班打卡', '下班打卡', '是否符合到班', '上班定位地點', '下班定位地點']];
+    lastReport.forEach(function (r) {
+      var i = r.in || {}, o = r.out || {};
+      rows.push([r.date.replace(/-/g, '/'), r.empNo || '', r.name, r.site, r.shift, r.start, r.end, i.time || '', o.time || '', JUDGE(r),
+                 i.time ? (i.at || '無對應上班地點') : '', o.time ? (o.at || '無對應上班地點') : '']);
+    });
+    loadXLSX().then(function () {
+      var ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 11 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 22 }, { wch: 16 }, { wch: 16 }];
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '出勤');
+      XLSX.writeFile(wb, '洪英出勤_' + $('rFrom').value + '_' + $('rTo').value + '.xlsx');
+    }).catch(function (e) { alert(e.message); });
+  };
+
+  // ---------- 班表格子 ----------
+  function monthDays(m) { var p = m.split('-').map(Number); return new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(); }
+  function thisMonth() { return today().slice(0, 7); }
+  $('mMonth').value = $('iMonth').value = thisMonth();
+  var gridOrig = {};
+  function siteName(id) { var s = SITES.filter(function (x) { return x.id === id; })[0]; return s ? s.name : ''; }
+  loaders.sched = function () {
+    var m = $('mMonth').value; if (!m) return;
+    refreshBase().then(function () { return api('/schedule?month=' + m); }).then(function (d) {
+      var days = monthDays(m), map = {}; gridOrig = {};
+      d.schedule.forEach(function (s) { map[s.emp_id + '|' + s.date] = s.shift_code + (s.site_id ? '@' + siteName(s.site_id) : ''); });
+      var t = $('mGrid'); t.innerHTML = '';
+      var hr = el('tr'); hr.appendChild(el('th', '姓名'));
+      for (var i = 1; i <= days; i++) { var dt = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5) - 1, i)).getUTCDay(); var th = el('th', i + '\n' + '日一二三四五六'.charAt(dt)); th.style.whiteSpace = 'pre'; if (dt === 0 || dt === 6) th.className = 'we'; hr.appendChild(th); }
+      var thead = el('thead'); thead.appendChild(hr); t.appendChild(thead);
+      var tb = el('tbody');
+      EMPS.filter(function (e) { return e.active; }).forEach(function (e) {
+        var tr = el('tr'); var n = td(tr, e.name); n.className = 'name';
+        for (var i = 1; i <= days; i++) {
+          var date = m + '-' + (i < 10 ? '0' : '') + i, k = e.id + '|' + date, v = map[k] || '';
+          gridOrig[k] = v; var inp = el("input"); inp.value = v; inp.title = v; inp.dataset.k = k;
+          inp.oninput = function () { this.className = this.value.trim() !== gridOrig[this.dataset.k] ? 'chg' : ''; };
+          td(tr, inp);
+        }
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      if (!EMPS.length) msg('mMsg', '還沒有員工。請先到「員工」新增，或直接匯入班表（會自動建立員工）。');
+      else if (!SHIFTS.length) msg('mMsg', '還沒有班別。請先到「班別」設定，例如 早 08:00–17:00。', 'err');
+      else msg('mMsg', '可用班別：' + SHIFTS.map(function (s) { return s.code + '（' + s.start + '–' + s.end + '）'; }).join('、'));
+    }).catch(err('mMsg'));
+  };
+  $('mLoad').onclick = loaders.sched;
+  function splitCell(v) { v = String(v || '').trim(); var at = v.split(/[@＠]/); return { code: at[0].trim(), site: (at[1] || '').trim() }; }
+  $('mSave').onclick = function () {
+    var entries = [];
+    Array.prototype.forEach.call($('mGrid').querySelectorAll('input.chg'), function (i) {
+      var k = i.dataset.k.split('|'), c = splitCell(i.value); entries.push({ emp_id: +k[0], date: k[1], code: c.code, site: c.site });
+    });
+    if (!entries.length) return msg('mMsg', '沒有變更');
+    api('/schedule', { entries: entries }).then(function (d) { msg('mMsg', '已儲存 ' + d.saved + ' 格', 'ok'); loaders.sched(); })
+      .catch(function (e) { msg('mMsg', e.message + (e.data && e.data.problems ? '\n' + e.data.problems.join('\n') : ''), 'err'); });
+  };
+
+  // ---------- 匯入 ----------
+  var parsed = null, rawRows = null;
+  function loadXLSX() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = res; s.onerror = function () { rej(new Error('Excel 讀取元件載入失敗，請改用貼上')); }; document.head.appendChild(s); });
+  }
+  $('iFile').onchange = function () {
+    var f = this.files[0]; if (!f) return; msg('iMsg', '讀取中…');
+    var isText = /\.(csv|tsv|txt)$/i.test(f.name);
+    (isText ? f.text().then(function (t) { rawRows = textRows(t); }) :
+      loadXLSX().then(function () { return f.arrayBuffer(); }).then(function (buf) {
+        var wb = XLSX.read(buf, { type: 'array', cellDates: true }); var ws = wb.Sheets[wb.SheetNames[0]];
+        rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+      })).then(function () { $('iText').value = ''; msg('iMsg', '已讀取「' + f.name + '」，按「預覽」。'); }).catch(function (e) { msg('iMsg', e.message, 'err'); });
+  };
+  function textRows(t) { var lines = t.replace(/\r/g, '').split('\n').filter(function (l) { return l.trim(); }); var sep = lines.some(function (l) { return l.indexOf('\t') >= 0; }) ? '\t' : ','; return lines.map(function (l) { return l.split(sep).map(function (c) { return c.replace(/^"|"$/g, '').trim(); }); }); }
+  function dayOf(v) {
+    if (v instanceof Date) return v.getDate();
+    if (typeof v === 'number') { if (v >= 1 && v <= 31 && v === Math.floor(v)) return v; if (v > 30000) return new Date(Math.round((v - 25569) * 86400e3)).getUTCDate(); return null; }
+    var s = String(v).trim(); var m = s.match(/^(\d{1,2})(?:日|號)?$/); if (m && +m[1] >= 1 && +m[1] <= 31) return +m[1];
+    m = s.match(/(\d{1,2})\s*[\/\-月.]\s*(\d{1,2})/); if (m && +m[2] >= 1 && +m[2] <= 31) return +m[2];
+    return null;
+  }
+  var OFF = /^(休|例|例假|休假|off|OFF|-|－|x|X|特休|假)$/;
+  $('iParse').onclick = function () {
+    var rows = $('iText').value.trim() ? textRows($('iText').value) : rawRows;
+    if (!rows || !rows.length) return msg('iMsg', '請先選檔案或貼上班表', 'err');
+    var month = $('iMonth').value; if (!month) return msg('iMsg', '請選擇月份', 'err');
+    var days = monthDays(month), hIdx = -1, cols = {};
+    for (var r = 0; r < Math.min(rows.length, 15) && hIdx < 0; r++) {
+      var c2 = {}, n = 0; rows[r].forEach(function (v, ci) { var d = dayOf(v); if (d && d <= days) { c2[ci] = d; n++; } });
+      if (n >= 7) { hIdx = r; cols = c2; }
+    }
+    if (hIdx < 0) return msg('iMsg', '找不到日期標題列（要有 1、2、3… 或 11/1、11/2…）', 'err');
+    var firstDayCol = Math.min.apply(null, Object.keys(cols).map(Number));
+    var entries = [], names = [], codes = {}, siteNames = {};
+    rows.slice(hIdx + 1).forEach(function (row) {
+      var name = ''; for (var i = 0; i < firstDayCol; i++) { var v = String(row[i] == null ? '' : row[i]).trim(); if (v && !/^\d+$/.test(v)) { name = v; break; } }
+      if (!name) return; names.push(name);
+      Object.keys(cols).forEach(function (ci) {
+        var raw = String(row[ci] == null ? '' : row[ci]).trim(), d = cols[ci], date = month + '-' + (d < 10 ? '0' : '') + d;
+        var c = OFF.test(raw) ? { code: '', site: '' } : splitCell(raw);
+        if (c.code) codes[c.code] = (codes[c.code] || 0) + 1; if (c.site) siteNames[c.site] = 1;
+        entries.push({ name: name, date: date, code: c.code, site: c.site });
+      });
+    });
+    if (!entries.length) return msg('iMsg', '沒有讀到任何員工列', 'err');
+    var known = SHIFTS.map(function (s) { return s.code; }), unknown = Object.keys(codes).filter(function (c) { return known.indexOf(c) < 0; });
+    var newEmps = names.filter(function (n) { return !EMPS.some(function (e) { return e.name === n; }); });
+    var badSites = Object.keys(siteNames).filter(function (s) { return !SITES.some(function (x) { return x.name === s; }); });
+    parsed = entries;
+    var t = '讀到 ' + names.length + ' 位員工、' + Object.keys(cols).length + ' 天。\n班別使用次數：' + Object.keys(codes).map(function (c) { return c + '×' + codes[c]; }).join('、');
+    if (newEmps.length) t += '\n會新增員工：' + newEmps.join('、');
+    var bad = false;
+    if (unknown.length) { t += '\n⚠ 沒有設定的班別：' + unknown.join('、') + '（請先到「班別」新增）'; bad = true; }
+    if (badSites.length) { t += '\n⚠ 沒有設定的工地：' + badSites.join('、'); bad = true; }
+    t += '\n注意：匯入會覆蓋這些員工該月份的班表，空白或「休」會清除當天的班。';
+    msg('iMsg', t, bad ? 'err' : ''); $('iGo').disabled = bad;
+  };
+  $('iGo').onclick = function () {
+    if (!parsed) return; $('iGo').disabled = true;
+    api('/schedule', { entries: parsed, createMissing: true }).then(function (d) {
+      msg('iMsg', '匯入完成：' + d.saved + ' 格' + (d.created.length ? '，新增員工 ' + d.created.length + ' 位' : ''), 'ok');
+      parsed = null; $('mMonth').value = $('iMonth').value; loaders.sched();
+    }).catch(function (e) { $('iGo').disabled = false; msg('iMsg', e.message + (e.data && e.data.problems ? '\n' + e.data.problems.join('\n') : ''), 'err'); });
+  };
+
+  // ---------- 員工 ----------
+  function siteSelect(val, withNone) {
+    var s = el('select'); if (withNone !== false) { var o = el('option', '（未設定）'); o.value = ''; s.appendChild(o); }
+    SITES.forEach(function (x) { var o = el('option', x.name); o.value = x.id; s.appendChild(o); }); s.value = val || ''; return s;
+  }
+  loaders.emp = function () {
+    apkStatus();
+    refreshBase().then(function () {
+      var es = $('eSite'), keep = es.value, fresh = siteSelect(keep); es.innerHTML = fresh.innerHTML; es.value = keep;
+      var tb = $('eRows'); tb.innerHTML = '';
+      EMPS.forEach(function (e) {
+        var tr = el('tr'); if (!e.active) tr.style.opacity = .5;
+        var nm = td(tr, e.name); if (e.title || e.dept_name) { nm.appendChild(el('br')); nm.appendChild(el('span', [e.title, e.dept_name].filter(Boolean).join('・'), 'muted')); }
+        var no = el('input'); no.value = e.emp_no || ''; no.size = 7; no.placeholder = '未填'; no.style.padding = '4px 6px';
+        no.onchange = function () { api('/employees/empno', { id: e.id, emp_no: no.value.trim() }).then(function () { no.style.background = '#dcfce7'; }).catch(function (x) { alert(x.message || x); }); };
+        td(tr, no);
+        var ap = el('input'); ap.value = e.auto_ping || ''; ap.size = 18; ap.placeholder = '例 1-5 09:00,12:00,18:00'; ap.style.padding = '4px 6px';
+        ap.onchange = function () { api('/employees/auto', { id: e.id, auto_ping: ap.value.trim() }).then(function () { ap.style.background = '#dcfce7'; }).catch(function (x) { ap.style.background = '#fee2e2'; alert(x.message || x); }); };
+        td(tr, ap);
+        var rm = el('input'); rm.type = 'checkbox'; rm.checked = !!e.roam; rm.title = '幹部、督導、機動：不比對案場，只記時間與位置';
+        rm.onchange = function () { api('/employees/roam', { id: e.id, roam: rm.checked }).catch(function (x) { alert(x.message || x); rm.checked = !rm.checked; }); };
+        td(tr, rm);
+        var ss = siteSelect(e.site_id); ss.onchange = function () { api('/employees/update', { id: e.id, site_id: +ss.value || null, active: e.active, max_devices: e.max_devices }).then(loaders.emp); }; td(tr, ss);
+        td(tr, el('span', !e.active ? '停用' : e.bound ? '已綁定' : '未綁定', 'tag ' + (!e.active ? 't-pending' : e.bound ? 't-ok' : 't-late')));
+        if (e.self) { tr.lastChild.appendChild(document.createTextNode(' ')); tr.lastChild.appendChild(el('span', '自行登記', 'tag t-late')); }
+        var dv = el('span'); dv.appendChild(document.createTextNode((e.deviceKinds.join('、') || '—') + '　上限 '));
+        var mx = el('select'); [1, 2, 3].forEach(function (n) { var o = el('option', n + ' 台'); o.value = n; mx.appendChild(o); }); mx.value = e.max_devices || 2;
+        mx.style.padding = '4px'; mx.onchange = function () { api('/employees/update', { id: e.id, site_id: e.site_id, active: e.active, max_devices: +mx.value }).then(loaders.emp); };
+        dv.appendChild(mx); td(tr, dv);
+        td(tr, e.bound_at ? new Date(Date.parse(e.bound_at) + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '');
+        td(tr, e.last || '');
+        var act = el('span');
+        var scb = el('button', 'iPhone 捷徑', 'sm'); scb.title = '產生 iPhone 捷徑自動回報代碼';
+        scb.onclick = function () {
+          if (!confirm('要幫「' + e.name + '」產生 iPhone 捷徑代碼嗎？\n（之前產生過的捷徑代碼會失效）')) return;
+          api('/employees/shortcut', { id: e.id }).then(function (d) { showShortcut(e.name, d); }).catch(function (x) { alert(x.message || x); });
+        };
+        act.appendChild(scb);
+        if (e.bound) act.appendChild(confirmBtn('解除綁定', 'danger', function () { api('/employees/unbind', { id: e.id }).then(loaders.emp); }));
+        act.appendChild(document.createTextNode(' '));
+        act.appendChild(confirmBtn(e.active ? '停用' : '啟用', '', function () { api('/employees/update', { id: e.id, site_id: e.site_id, active: !e.active, max_devices: e.max_devices }).then(loaders.emp); }));
+        td(tr, act); tb.appendChild(tr);
+      });
+      if (!EMPS.length) { var tr = el('tr'); var c = td(tr, '還沒有員工'); c.colSpan = 10; c.className = 'muted'; tb.appendChild(tr); }
+    }).catch(err('eMsg'));
+  };
+  $('eShare').onclick = function () { copyText('出勤打卡（iPhone）：\n' + location.origin + '/?openExternalBrowser=1', function () { $('eShareMsg').textContent = '已複製 iPhone 連結'; }); };
+  $('eShareA').onclick = function () { copyText('出勤打卡（安卓 App）：\n' + location.origin + '/android?openExternalBrowser=1', function () { $('eShareMsg').textContent = '已複製安卓連結'; }); };
+  function apkStatus() { api('/apk').then(function (d) { $('apkMsg').textContent = d.source === 'github' ? '目前版本：' + d.latest + '（自動從 GitHub 取得最新版，不用手動上架）' : d.apk ? '目前版本：' + (d.apk.version || '') + '（' + Math.round(d.apk.size / 1024) + ' KB）' : '尚未上架安卓 App'; }).catch(function () {}); }
+  $('apkUp').onclick = function () {
+    var f = $('apkFile').files[0]; if (!f) { $('apkMsg').textContent = '請先選 APK 檔'; return; }
+    var m = f.name.match(/v?(\d+\.\d+\.\d+)/), rd = new FileReader();
+    rd.onload = function () { var b64 = String(rd.result).split(',')[1];
+      api('/apk', { data: b64, version: m ? 'v' + m[1] : '' }).then(function () { $('apkMsg').textContent = m ? '已上架 ✓ 員工打開 App 會提示更新' : '已上架，但檔名沒有版本號（例如 v1.0.9），App 不會提示更新'; if (m) setTimeout(apkStatus, 4000); }).catch(function (e) { $('apkMsg').textContent = e.message; }); };
+    rd.readAsDataURL(f);
+  };
+  $('apkPull').onclick = function () {
+    if ($('apkPull').textContent !== '確定上架？舊 App 會升級') { $('apkPull').textContent = '確定上架？舊 App 會升級'; return; }
+    $('apkPull').disabled = true;
+    api('/apk/pull', {}).then(function (d) { $('apkMsg').textContent = '已上架整合版 ' + d.version + ' ✓ 舊版打卡 App 會在背景自動升級'; }).catch(function (e) { $('apkMsg').textContent = e.message; })
+      .then(function () { $('apkPull').disabled = false; $('apkPull').textContent = '上架 GitHub 最新整合版'; });
+  };
+  $('eAdd').onclick = function () {
+    var names = $('eNames').value.split(/\n|,|、/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!names.length) return msg('eMsg', '請輸入姓名', 'err');
+    api('/employees', { names: names, site_id: +$('eSite').value || null }).then(function () { $('eNames').value = ''; msg('eMsg', '已新增 ' + names.length + ' 位', 'ok'); loaders.emp(); }).catch(err('eMsg'));
+  };
+
+  // ---------- 班別 ----------
+  loaders.shift = function () {
+    api('/shifts').then(function (d) {
+      SHIFTS = d.shifts; var tb = $('fRows'); tb.innerHTML = '';
+      d.shifts.forEach(function (s) {
+        var tr = el('tr'); td(tr, s.code); td(tr, s.name); td(tr, s.start + '–' + s.end + (s.end <= s.start ? '（跨夜）' : ''));
+        var a = el('span'); var eb = el('button', '編輯', 'sm'); eb.onclick = function () { $('fCode').value = s.code; $('fName').value = s.name; $('fStart').value = s.start; $('fEnd').value = s.end; };
+        a.appendChild(eb); a.appendChild(document.createTextNode(' ')); a.appendChild(confirmBtn('刪除', 'danger', function () { api('/shifts/delete', { code: s.code }).then(loaders.shift); }));
+        td(tr, a); tb.appendChild(tr);
+      });
+      if (!d.shifts.length) { var tr = el('tr'); var c = td(tr, '還沒有班別'); c.colSpan = 4; c.className = 'muted'; tb.appendChild(tr); }
+    }).catch(err('fMsg'));
+  };
+  $('fSave').onclick = function () {
+    api('/shifts', { code: $('fCode').value.trim(), name: $('fName').value.trim(), start: $('fStart').value, end: $('fEnd').value })
+      .then(function () { msg('fMsg', '已儲存', 'ok'); $('fCode').value = $('fName').value = ''; loaders.shift(); }).catch(err('fMsg'));
+  };
+
+  // ---------- 工地 ----------
+  var editSite = null;
+  loaders.site = function () {
+    api('/sites').then(function (d) {
+      SITES = d.sites; var tb = $('sRows'); tb.innerHTML = '';
+      d.sites.forEach(function (s) {
+        var tr = el('tr'); td(tr, s.name); td(tr, mapLink(s.lat, s.lng, s.lat.toFixed(6) + ', ' + s.lng.toFixed(6))); td(tr, s.radius + ' m');
+        var a = el('span'); var eb = el('button', '編輯', 'sm');
+        eb.onclick = function () { editSite = s.id; $('sName').value = s.name; $('sCoord').value = s.lat + ', ' + s.lng; $('sRadius').value = s.radius; $('sCancel').style.display = ''; window.scrollTo(0, 0); };
+        a.appendChild(eb); a.appendChild(document.createTextNode(' ')); a.appendChild(confirmBtn('停用', 'danger', function () { api('/sites/delete', { id: s.id }).then(loaders.site); }));
+        td(tr, a); tb.appendChild(tr);
+      });
+      if (!d.sites.length) { var tr = el('tr'); var c = td(tr, '還沒有工地'); c.colSpan = 4; c.className = 'muted'; tb.appendChild(tr); }
+    }).catch(err('sMsg'));
+  };
+  function resetSite() { editSite = null; $('sName').value = $('sCoord').value = ''; $('sRadius').value = 200; $('sCancel').style.display = 'none'; }
+  $('sCancel').onclick = resetSite;
+  $('sAdd').onclick = function () {
+    var m = $('sCoord').value.match(/(-?\d+(?:\.\d+)?)\s*[,，\s]\s*(-?\d+(?:\.\d+)?)/);
+    if (!m) return msg('sMsg', '經緯度格式不對，例：25.0330, 121.5654', 'err');
+    api('/sites', { id: editSite, name: $('sName').value.trim(), lat: +m[1], lng: +m[2], radius: +$('sRadius').value || 200 })
+      .then(function () { msg('sMsg', '已儲存', 'ok'); resetSite(); loaders.site(); }).catch(err('sMsg'));
+  };
+
+  // ---------- 批次匯入工地 ----------
+  var bParsed = null;
+  var LINE_RE = /^(.+?)[\s,，、:：|]+(-?\d{1,3}\.\d+)\s*[,，\s]\s*(-?\d{1,3}\.\d+)(?:\s*[,，\s]\s*(\d{2,4}))?\s*(?:公尺|m|M)?\s*$/;
+  $('bText').oninput = function () { $('bGo').disabled = true; bParsed = null; };
+  $('bParse').onclick = function () {
+    var def = Math.round(+$('bRadius').value) || 200, out = [], bad = [], seen = {};
+    $('bText').value.replace(/\r/g, '').split('\n').forEach(function (raw, i) {
+      var line = raw.replace(/\t/g, ' ').trim(); if (!line) return;
+      var m = line.match(LINE_RE);
+      if (!m) { bad.push(i + 1); return; }
+      var name = m[1].replace(/[\s,，、:：|]+$/, '').trim(), lat = +m[2], lng = +m[3], r = m[4] ? +m[4] : def;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) { bad.push(i + 1); return; }
+      if (lat > 100 || (Math.abs(lng) < 90 && Math.abs(lat) > 90)) { bad.push(i + 1); return; }
+      seen[name] = out.length; out.push({ name: name, lat: lat, lng: lng, radius: r });
+    });
+    var uniq = Object.keys(seen).map(function (k) { return out[seen[k]]; });
+    var tb = $('bRows'); tb.innerHTML = '';
+    uniq.forEach(function (s, i) {
+      var tr = el('tr'); td(tr, i + 1); td(tr, s.name); td(tr, mapLink(s.lat, s.lng, s.lat + ', ' + s.lng)); td(tr, s.radius + ' m');
+      var exists = SITES.some(function (x) { return x.name === s.name; });
+      td(tr, el('span', exists ? '更新' : '新增', 'tag ' + (exists ? 't-late' : 't-ok'))); tb.appendChild(tr);
+    });
+    $('bPrev').style.display = uniq.length ? '' : 'none';
+    bParsed = uniq.length ? uniq : null; $('bGo').disabled = !bParsed;
+    var t = '讀到 ' + uniq.length + ' 個工地。' + (out.length > uniq.length ? '（重複的名稱以最後一行為準）' : '') + '\n點座標可以開 Google 地圖確認位置。';
+    if (bad.length) t += '\n⚠ 第 ' + bad.join('、') + ' 行看不懂，已略過。格式：名稱, 緯度, 經度';
+    msg('bMsg', t, bad.length ? 'err' : '');
+  };
+  $('bGo').onclick = function () {
+    if (!bParsed) return; $('bGo').disabled = true;
+    api('/sites/bulk', { sites: bParsed }).then(function (d) {
+      msg('bMsg', '完成：新增 ' + d.added + ' 個、更新 ' + d.updated + ' 個', 'ok'); $('bText').value = ''; $('bPrev').style.display = 'none'; bParsed = null; loaders.site();
+    }).catch(function (e) { $('bGo').disabled = false; if (e.message !== '401') msg('bMsg', e.message, 'err'); });
+  };
+
+  // ---------- 打卡 QR Code（只在後台）----------
+  function loadQR() {
+    if (window.qrcode) return Promise.resolve();
+    return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload = res; s.onerror = function () { rej(new Error('QR 元件載入失敗，請檢查網路')); }; document.head.appendChild(s); });
+  }
+  var qrData = '';
+  function svgQR(text, box) { var q = qrcode(0, 'M'); q.addData(text); q.make(); box.innerHTML = q.createSvgTag({ cellSize: 10, margin: 3, scalable: true }); var s = box.querySelector('svg'); s.style.width = '100%'; s.style.height = 'auto'; return q; }
+  $('qrBtn').onclick = function () {
+    var url = location.origin + '/?openExternalBrowser=1';
+    Promise.all([loadQR(), api('/apk').catch(function () { return {}; })]).then(function (r) {
+      var q = svgQR(url, $('qrImg')); qrData = q.createDataURL(12, 4); $('qrUrl').textContent = url;
+      var has = r[1] && r[1].apk;
+      $('apkCol').style.display = has ? '' : 'none'; $('apkHint').style.display = has ? '' : 'none';
+      if (has) { var au = location.origin + '/android?openExternalBrowser=1'; svgQR(au, $('qrApk')); $('apkUrl').textContent = au + '（' + (r[1].apk.version || '') + '）'; }
+      $('qrBox').style.display = 'block';
+    }).catch(function (e) { alert(e.message); });
+  };
+  $('qrClose').onclick = function () { $('qrBox').style.display = 'none'; };
+  $('qrDl').onclick = function () { var a = el('a'); a.href = qrData; a.download = '出勤打卡QRCode.gif'; a.click(); };
+  $('qrCopy').onclick = function () { copyText(location.origin + '/?openExternalBrowser=1', function () { $('qrCopy').textContent = '已複製 ✓'; }); };
+
+  // ---------- 定位紀錄 ----------
+  $('pDate').value = today();
+  var ERR = { denied: '拒絕定位', timeout: '定位逾時', unavailable: '無法定位', unsupported: '不支援定位', no_location: '無位置' };
+  loaders.ping = function () {
+    api('/pings?date=' + $('pDate').value).then(function (d) {
+      var tb = $('pRows'); tb.innerHTML = '';
+      d.pings.forEach(function (p) {
+        var tr = el('tr'); td(tr, p.time); td(tr, p.name);
+        if (p.lat == null) td(tr, '—');
+        else if (p.at) td(tr, el('span', p.at.name + '（' + p.at.dist + ' m）', 'tag t-ok'));
+        else td(tr, el('span', '無對應上班地點' + (p.nearest ? '（最近：' + p.nearest.name + ' ' + p.nearest.dist + ' m）' : ''), 'tag t-far'));
+        td(tr, p.lat != null ? mapLink(p.lat, p.lng, p.lat.toFixed(5) + ', ' + p.lng.toFixed(5)) : el('span', ERR[p.err] || p.err, 'tag t-missing'));
+        td(tr, p.acc != null ? '±' + Math.round(p.acc) + ' m' : ''); td(tr, p.ip); tb.appendChild(tr);
+      });
+      if (!d.pings.length) { var tr = el('tr'); var c = td(tr, '這天沒有紀錄'); c.colSpan = 6; c.className = 'muted'; tb.appendChild(tr); }
+    });
+  };
+  $('pLoad').onclick = loaders.ping;
+
+  // ---------- 安卓 App 人員定位 ----------
+  var aSel = null;
+  function placeTag(at, nearest) {
+    if (at) return el('span', at.name + '（' + at.dist + ' m）', 'tag t-ok');
+    return el('span', '無對應上班地點' + (nearest ? '（最近：' + nearest.name + ' ' + nearest.dist + ' m）' : ''), 'tag t-far');
+  }
+  function ago(ms, now) { var m = Math.round((now - ms) / 60e3); return m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; }
+  function showMap(lat, lng) { $('aMap').src = 'https://maps.google.com/maps?q=' + lat + ',' + lng + '&z=16&output=embed'; }
+  loaders.app = function () {
+    $('aMsg').textContent = '載入中…';
+    api('/app-staff').then(function (d) {
+      var tb = $('aRows'); tb.innerHTML = ''; $('aMsg').textContent = '共 ' + d.staff.length + ' 人';
+      d.staff.forEach(function (s) {
+        var tr = el('tr'); if (!s.active) tr.style.opacity = .5;
+        var nm = el('a', s.name); nm.href = '#'; nm.style.fontWeight = '700';
+        nm.onclick = function (ev) { ev.preventDefault(); openStaff(s); }; td(tr, nm);
+        td(tr, s.emp_no || '—'); td(tr, s.auto_ping || '依班表');
+        td(tr, s.loc ? s.loc.when + '（' + ago(s.loc.ms, d.now) + '）' : (s.last && s.last.err ? el('span', ERR[s.last.err] || s.last.err, 'tag t-missing') : '還沒有定位'));
+        td(tr, s.loc ? placeTag(s.loc.at, s.loc.nearest) : '');
+        td(tr, s.has_app ? 'v' + (s.app_version || '?') : 'iPhone 捷徑');
+        var lc = el('span');
+        if (s.waiting) lc.appendChild(el('span', '已要求，等待回報…', 'tag t-late'));
+        else if (s.can_locate) {
+          var lb = el('button', '立即定位', 'primary sm');
+          lb.onclick = function () {
+            lb.disabled = true;
+            api('/employees/locate', { id: s.id }).then(function () { lb.replaceWith(el('span', s.has_app ? '已要求，等待回報…' : '已要求，下個整點回報', 'tag t-late')); startWatch(); })
+              .catch(function (x) { lb.disabled = false; alert(x.message || x); });
+          };
+          lc.appendChild(lb);
+        } else lc.appendChild(el('span', s.auto_ping ? '非上班時段' : '未設定定時定位', 'muted'));
+        td(tr, lc);
+        tb.appendChild(tr);
+      });
+      if (!d.staff.length) { var tr = el('tr'); var c = td(tr, '還沒有人用安卓 App 綁定'); c.colSpan = 7; c.className = 'muted'; tb.appendChild(tr); }
+      if (d.staff.some(function (x) { return x.waiting; })) startWatch();
+    }).catch(err('aMsg'));
+  };
+  function openStaff(s) {
+    aSel = s; $('aDetail').style.display = ''; $('aName').textContent = s.name + (s.emp_no ? '（' + s.emp_no + '）' : '');
+    $('aDate').value = s.loc ? s.loc.when.slice(0, 10) : today();
+    if (s.loc) showMap(s.loc.lat, s.loc.lng); else $('aMap').removeAttribute('src');
+    loadDay(); $('aDetail').scrollIntoView({ behavior: 'smooth' });
+  }
+  function loadDay() {
+    if (!aSel) return;
+    api('/pings?date=' + $('aDate').value + '&emp=' + aSel.id).then(function (d) {
+      var tb = $('aPings'); tb.innerHTML = '';
+      d.pings.forEach(function (p, i) {
+        var tr = el('tr'); td(tr, p.time);
+        td(tr, p.lat == null ? '—' : placeTag(p.at, p.nearest));
+        if (p.lat != null) { var a = el('a', '看地圖'); a.href = '#'; a.onclick = function (ev) { ev.preventDefault(); showMap(p.lat, p.lng); }; var c = td(tr, a); c.appendChild(document.createTextNode('　')); c.appendChild(mapLink(p.lat, p.lng, 'Google 地圖')); }
+        else td(tr, el('span', ERR[p.err] || p.err, 'tag t-missing'));
+        td(tr, p.acc != null ? '±' + Math.round(p.acc) + ' m' : ''); tb.appendChild(tr);
+        if (i === 0 && p.lat != null) showMap(p.lat, p.lng);
+      });
+      if (!d.pings.length) { var tr = el('tr'); var c = td(tr, '這天沒有定位'); c.colSpan = 4; c.className = 'muted'; tb.appendChild(tr); }
+    });
+  }
+  // 有人在等回報時，每 30 秒自動重新整理（最多 20 分鐘）
+  var watchTimer = null, watchEnd = 0;
+  function startWatch() {
+    watchEnd = Date.now() + 20 * 60e3;
+    if (watchTimer) return;
+    watchTimer = setInterval(function () {
+      if (Date.now() > watchEnd || $('s-app').style.display === 'none') { clearInterval(watchTimer); watchTimer = null; return; }
+      loaders.app(); if (aSel) loadDay();
+    }, 30e3);
+  }
+  // iPhone 捷徑設定資訊（代碼只顯示一次）
+  function showShortcut(name, d) {
+    var w = el('div'); w.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px';
+    var c = el('div', null, 'card'); c.style.cssText = 'max-width:560px;width:100%;max-height:90vh;overflow:auto;margin:0';
+    c.innerHTML = '<h2 style="margin-top:0"></h2>'
+      + '<p class="muted">回報時間由後台「幹部定時定位」決定，以後改時間只要改後台，手機不用再動。代碼只顯示這一次。</p>'
+      + '<ol style="line-height:1.9;padding-left:20px">'
+      + '<li>「捷徑」→ 右上 <b>＋</b> → 名稱打「洪英打卡回報」</li>'
+      + '<li>加入 <b>取得 URL 內容</b>，網址填「詢問網址」→ 展開 → 標頭新增 <b>X-Device</b>＝代碼（方法維持 GET）</li>'
+      + '<li>加入 <b>如果</b>：「URL 的內容」<b>是</b> <b>1</b></li>'
+      + '<li>在「如果」裡面加入 <b>取得目前位置</b></li>'
+      + '<li>再加入 <b>取得 URL 內容</b>，網址填「回報網址」→ 方法 <b>POST</b> → 標頭 <b>X-Device</b>＝代碼 → 本文 <b>JSON</b>，數字欄位 <b>lat</b>＝目前位置的緯度、<b>lng</b>＝目前位置的經度</li>'
+      + '<li>按 ▶ 試跑，允許定位</li>'
+      + '<li>「自動化」→ ＋ →「特定時間」→ 每天 → 選「<b>立即執行</b>」→「洪英打卡回報」。<b>每個整點各做一個</b>（建議 08:00～20:00，共 13 個）</li>'
+      + '<li>（建議）再加一個「App」→ 選 <b>LINE</b> →「已開啟」→ 立即執行 → 洪英打卡回報。他打開 LINE 時也會檢查，「立即定位」會更快</li>'
+      + '</ol>'
+      + '<p class="muted">手機每次只是問「要不要回報」，後台說不用就不會抓定位。整點觸發，所以設定 9:30 會在 10:00 回報。</p>';
+    c.querySelector('h2').textContent = name + ' 的 iPhone 捷徑設定';
+    function line(label, val) {
+      var r = el('div'); r.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0';
+      r.appendChild(el('b', label)); var i = el('input'); i.value = val; i.readOnly = true; i.style.cssText = 'flex:1;font-family:monospace;font-size:13px;padding:6px';
+      var b = el('button', '複製', 'sm'); b.onclick = function () { i.select(); try { navigator.clipboard.writeText(val); } catch (x) { document.execCommand('copy'); } b.textContent = '已複製'; };
+      r.appendChild(i); r.appendChild(b); c.appendChild(r);
+    }
+    line('詢問網址', d.url.replace('/api/ping', '/api/should-report')); line('回報網址', d.url); line('代碼', d.token);
+    var close = el('button', '關閉', 'primary'); close.style.marginTop = '10px'; close.onclick = function () { w.remove(); };
+    c.appendChild(close); w.appendChild(c); document.body.appendChild(w);
+  }
+  $('aLoad').onclick = loaders.app;
+  $('aDay').onclick = loadDay;
+
+  if (KEY) api('/sites').then(enter).catch(function () {});
+})();
+</script>
+</body>
+</html>

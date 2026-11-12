@@ -1,0 +1,63 @@
+name: 打包整合版 APK
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'android/**', '.github/workflows/android.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: 打包
+        run: gradle assembleRelease --no-daemon --stacktrace
+        working-directory: android
+
+      - name: 改檔名
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "洪英整合-v2.0.${{ github.run_number }}.apk"
+          cp android/admin/build/outputs/apk/release/admin-release.apk "洪英後台-v2.0.${{ github.run_number }}.apk"
+
+      - name: 上傳打包結果
+        uses: actions/upload-artifact@v4
+        with:
+          name: 洪英整合-apk
+          path: "*.apk"
+
+      - name: 存一份到 dist 分支（方便後台上架）
+        run: |
+          mkdir -p /tmp/dist && cp "洪英整合-v2.0.${{ github.run_number }}.apk" /tmp/dist/clockin.apk && cp "洪英後台-v2.0.${{ github.run_number }}.apk" /tmp/dist/admin.apk
+          echo "v2.0.${{ github.run_number }}" > /tmp/dist/VERSION
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan dist
+          git rm -rf . -q
+          cp /tmp/dist/* .
+          git add clockin.apk admin.apk VERSION
+          git commit -m "APK v2.0.${{ github.run_number }}" -q
+          git push -f origin dist
+
+      - name: 發佈下載版本
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: 洪英整合 v2.0.${{ github.run_number }}
+          files: "*.apk"
+          make_latest: true
+

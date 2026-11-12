@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="洪英打卡">
+<link rel="icon" href="/fav-64.png">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.json">
+<title>洪英打卡</title>
+<style>
+  :root { --brand:#0f766e; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --bg:#f4f6f5; --text:#1c2421; --muted:#5f6b67; --line:#e2e8e6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; background:var(--bg); color:var(--text);
+         padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  main { max-width:440px; margin:0 auto; padding:18px 16px 40px; }
+  .card { background:#fff; border-radius:14px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.06); margin-bottom:14px; }
+  h1 { font-size:21px; margin:4px 0 14px; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  p, li { line-height:1.7; font-size:15px; }
+  ol { padding-left:20px; margin:8px 0; }
+  .muted { color:var(--muted); font-size:13px; line-height:1.6; }
+  button { font-size:17px; padding:14px; border:1px solid #cfd8d5; border-radius:12px; background:#fff; color:var(--text); width:100%; }
+  button.main { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:700; }
+  button:disabled { opacity:.5; }
+  input.name { width:100%; font-size:22px; text-align:center; padding:12px; border:1px solid #cfd8d5; border-radius:12px; margin:8px 0 14px; }
+  input.code { width:100%; font-size:28px; letter-spacing:10px; text-align:center; padding:12px; border:1px solid #cfd8d5; border-radius:12px; margin:8px 0 14px; }
+  label.chk { display:flex; gap:10px; align-items:flex-start; font-size:15px; margin:14px 0; line-height:1.6; }
+  label.chk input { width:22px; height:22px; flex:none; margin-top:2px; }
+  .msg { font-size:14px; margin-top:10px; min-height:20px; }
+  .msg.err { color:var(--bad); }
+  header { text-align:center; margin:4px 0 14px; }
+  #who { font-size:18px; font-weight:700; }
+  #clock { font-size:46px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:4px; }
+  #date { color:var(--muted); }
+  #status { border-left:6px solid #cbd5e1; }
+  #status.ok { border-left-color:var(--ok); }
+  #status.warn { border-left-color:var(--warn); }
+  #status.err { border-left-color:var(--bad); }
+  #sTitle { font-size:20px; font-weight:700; margin-bottom:6px; }
+  #sDetail { color:var(--muted); font-size:14px; line-height:1.7; white-space:pre-line; }
+  .shift { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:15px; }
+  .shift:last-child { border-bottom:0; }
+  h1.big { font-size:30px; text-align:center; line-height:1.35; margin:6px 0 18px; }
+  .istep { display:flex; align-items:center; gap:14px; background:#fff; border-radius:18px; padding:16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .inum { flex:none; width:48px; height:48px; border-radius:50%; background:#0f766e; color:#fff; font-size:28px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .itxt { font-size:23px; font-weight:700; line-height:1.55; }
+  .ibtn { display:inline-flex; align-items:center; gap:6px; font-size:23px; font-weight:800; color:#1a56db; border:2px solid #1a56db; border-radius:12px; padding:4px 12px; background:#eef3ff; vertical-align:middle; }
+  .ibtn.sm { font-size:18px; padding:1px 8px; }
+  .ibtn.sm svg { width:22px; height:22px; }
+  .ihint { font-size:17px; color:#5f6b67; margin:-4px 0 14px 8px; line-height:1.8; }
+  .appicon { display:inline-block; width:36px; height:36px; border-radius:9px; background:#0f766e; vertical-align:middle; position:relative; }
+  .appicon::after { content:''; position:absolute; left:11px; top:7px; width:14px; height:14px; border:4px solid #fff; border-radius:50% 50% 50% 0; transform:rotate(-45deg); box-sizing:border-box; }
+  .istep.warn { background:#fff7e6; border:2px solid #f0b429; }
+  .istep.warn .inum { background:#d97706; }
+  .isub { font-size:17px; color:#5f6b67; font-weight:400; margin-top:4px; }
+  label.chk.big { font-size:21px; font-weight:700; margin:6px 0 0; }
+  label.chk.big input { width:30px; height:30px; }
+  button.huge { font-size:26px; padding:20px; border-radius:16px; margin-top:6px; }
+  input.huge { font-size:30px; padding:16px; }
+  .msg.big { font-size:20px; line-height:1.6; text-align:center; }
+  .arrow { text-align:center; font-size:56px; color:#0f766e; animation:bob 1s infinite; }
+  @keyframes bob { 0%,100% { transform:translateY(0); } 50% { transform:translateY(10px); } }
+  .view { display:none; }
+  .step { font-size:13px; color:var(--brand); font-weight:700; margin-bottom:4px; }
+  .row2 { display:flex; gap:10px; margin-bottom:14px; }
+  .row2 button { font-size:21px; font-weight:800; padding:18px 8px; border-width:2px; border-color:var(--brand); color:var(--brand); }
+  .seg { display:flex; gap:8px; flex-wrap:wrap; }
+  .seg button { flex:1; min-width:28%; font-size:19px; padding:14px 6px; }
+  .seg button.on, .chips button.on { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:700; }
+  .chips button { width:auto; display:inline-block; margin:0 6px 8px 0; font-size:17px; padding:10px 14px; }
+  .lbl { display:block; font-size:18px; font-weight:700; margin:18px 0 8px; }
+  .fin { width:100%; box-sizing:border-box; font-size:20px; padding:12px; border:1px solid #cfd8d5; border-radius:12px; background:#fff; }
+  .req { padding:12px 0; border-bottom:1px solid var(--line); }
+  .req:last-child { border-bottom:0; }
+  .req b { font-size:17px; }
+  .req .sub { color:var(--muted); font-size:14px; margin-top:4px; line-height:1.6; }
+  .tag { display:inline-block; font-size:13px; padding:2px 8px; border-radius:99px; margin-right:6px; font-weight:700; }
+  .t-pending { background:#fef3c7; color:#92400e; } .t-approved { background:#dcfce7; color:#166534; }
+  .t-rejected { background:#fee2e2; color:#991b1b; } .t-cancelled { background:#eef1f0; color:#5f6b67; }
+  .req .acts { display:flex; gap:8px; margin-top:10px; }
+  .req .acts button { padding:10px; font-size:17px; }
+  .req .acts .ok { background:var(--ok); color:#fff; border-color:var(--ok); font-weight:700; }
+  #apprCard { border:2px solid #f0b429; }
+  button.link { border:0; background:none; color:var(--muted); font-size:17px; text-decoration:underline; margin-top:6px; }
+  .consent { background:#f8faf9; border:1px solid var(--line); border-radius:10px; padding:4px 14px; }
+</style>
+</head>
+<body>
+<main>
+  <!-- 0. iPhone：先加到桌面 -->
+  <section class="view" id="vHome">
+    <div style="text-align:center"><img src="/icon-180.png" alt="洪英" style="width:76px;height:76px;border-radius:18px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>
+    <h1 class="big">先加到手機桌面</h1>
+    <div class="istep"><div class="inum">1</div><div class="itxt">按最下面 <span class="ibtn"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1a56db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> 分享</span></div></div>
+    <div class="istep"><div class="inum">2</div><div class="itxt">按 <span class="ibtn"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1a56db" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg> 加入主畫面</span></div></div>
+    <div class="istep"><div class="inum">3</div><div class="itxt">按 <span class="ibtn">新增</span><div class="isub">再從桌面的 <b>洪英打卡</b> 打開</div></div></div>
+    <div class="arrow">↓</div>
+    <button class="link" id="btnSkipHome">不加桌面，直接開始</button>
+  </section>
+
+  <!-- 1. 輸入姓名＋同意（一個畫面完成）-->
+  <section class="view" id="vStart">
+    <div style="text-align:center"><img src="/icon-180.png" alt="洪英" style="width:76px;height:76px;border-radius:18px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>
+    <h1 class="big">輸入姓名和員工編號</h1>
+    <input class="name huge" id="code" autocomplete="name" maxlength="30" placeholder="例：王小明">
+    <input class="name huge" id="empNo" autocomplete="off" autocapitalize="characters" maxlength="20" placeholder="員工編號（例：X287）" style="margin-top:10px">
+    <button class="main huge" id="btnStart">開始</button>
+    <div class="msg big" id="rMsg"></div>
+    <div class="istep warn" id="allowTip" style="margin-top:14px"><div class="itxt" style="font-size:20px">跳出視窗請按 <span class="ibtn">允許</span></div></div>
+    <p class="muted" style="text-align:center;margin-top:10px">按「開始」即同意公司在上下班時間記錄打卡位置，僅用於出勤管理。</p>
+  </section>
+
+  <!-- 3. 主畫面：打開即打卡 -->
+  <section class="view" id="vMain">
+    <header>
+      <div id="who"></div>
+      <div id="clock">--:--:--</div>
+      <div id="date"></div>
+    </header>
+    <div class="card" id="status">
+      <div id="sTitle">定位中</div>
+      <div id="sDetail"></div>
+    </div>
+    <button class="main" id="btnRetry" style="margin-bottom:14px">重新打卡</button>
+    <div class="card" id="apprCard" style="display:none"><h2>待我核准 <span id="apprN"></span></h2><div id="apprList"></div></div>
+    <div class="row2"><button id="btnFix">補卡</button><button id="btnLeave">請假</button></div>
+    <div class="row2"><button id="btnPay" onclick="location.href='/pay'">查薪資單</button></div>
+    <div class="card" id="shiftCard">
+      <h2>我的班</h2>
+      <div id="shifts"></div>
+    </div>
+    <div class="card" id="myCard" style="display:none"><h2>我的申請</h2><div id="myList"></div></div>
+    <div class="card muted" id="permHelp" style="display:none">請到手機設定開啟這個網站的定位權限</div>
+  </section>
+
+  <!-- 補卡 -->
+  <section class="view" id="vFix">
+    <button class="link" data-back style="width:auto">← 返回</button>
+    <h1 class="big">補卡</h1>
+    <div class="seg" id="fIo"><button data-v="in" class="on">上班</button><button data-v="out">下班</button></div>
+    <span class="lbl">哪一天</span><div class="seg" id="fDay"></div>
+    <span class="lbl">幾點</span><input type="time" id="fTime" class="fin">
+    <span class="lbl">原因</span>
+    <div class="chips" id="fWhy"><button>忘記打卡</button><button>手機沒電</button><button>沒有網路</button><button>定位失敗</button><button>臨時支援其他案場</button><button>其他</button></div>
+    <input id="fNote" class="fin" maxlength="100" placeholder="補充說明（可不填）">
+    <button class="main" id="fGo" style="margin-top:18px;font-size:21px;padding:18px">送出補卡</button>
+    <div class="msg big" id="fMsg"></div>
+    <p class="muted">送出時會附上你現在的位置；主管核准後才算數。</p>
+  </section>
+
+  <!-- 請假 -->
+  <section class="view" id="vLeave">
+    <button class="link" data-back style="width:auto">← 返回</button>
+    <h1 class="big">請假</h1>
+    <span class="lbl">假別</span><select id="lType" class="fin"></select>
+    <span class="lbl">從哪天</span><input type="date" id="lFrom" class="fin">
+    <span class="lbl">到哪天</span><input type="date" id="lTo" class="fin">
+    <span class="lbl">時間</span>
+    <div class="seg" id="lAll"><button data-v="1" class="on">整天</button><button data-v="0">部分時段</button></div>
+    <div id="lTimes" style="display:none;margin-top:10px" class="row2"><input type="time" id="lT1" class="fin"><input type="time" id="lT2" class="fin"></div>
+    <span class="lbl">原因（可不填）</span><input id="lNote" class="fin" maxlength="100">
+    <button class="main" id="lGo" style="margin-top:18px;font-size:21px;padding:18px">送出請假</button>
+    <div class="msg big" id="lMsg"></div>
+    <p class="muted">送出後由你的主管核准，核准結果會顯示在「我的申請」。</p>
+  </section>
+
+  <!-- 停用 -->
+  <section class="view" id="vDisabled">
+    <div class="card"><h1>帳號已停用</h1><p>請聯絡管理員。</p></div>
+  </section>
+</main>
+
+<script>
+// 在 LINE 內建瀏覽器打開時，自動改用手機的預設瀏覽器
+if (/\bLine\//i.test(navigator.userAgent) && location.search.indexOf('openExternalBrowser=1') < 0) {
+  location.replace(location.pathname + '?openExternalBrowser=1');
+}
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function tw(ms) { var t = new Date(ms + 8 * 3600e3); return { d: t.getUTCFullYear() + '/' + pad(t.getUTCMonth() + 1) + '/' + pad(t.getUTCDate()),
+    md: (t.getUTCMonth() + 1) + '/' + t.getUTCDate(), w: '日一二三四五六'.charAt(t.getUTCDay()), hm: pad(t.getUTCHours()) + ':' + pad(t.getUTCMinutes()), s: pad(t.getUTCSeconds()) }; }
+  function show(v) { ['vHome', 'vStart', 'vMain', 'vDisabled', 'vFix', 'vLeave'].forEach(function (id) { $(id).style.display = id === v ? 'block' : 'none'; }); }
+
+
+  function api(path, opt) {
+    opt = opt || {}; opt.credentials = 'same-origin';
+    opt.headers = Object.assign({ 'Content-Type': 'application/json' }, opt.headers || {});
+    var t = ls('ck_dev'); if (t) opt.headers['X-Device'] = t;
+    return fetch(path, opt).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d._status = r.status; return d; }); });
+  }
+
+  var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+
+  var skew = 0, me = null;
+  function now() { return Date.now() + skew; }
+  setInterval(function () { if (!me) return; var x = tw(now()); $('clock').textContent = x.hm + ':' + x.s; $('date').textContent = x.d + '（' + x.w + '）'; }, 1000);
+
+  function getPos() {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res({ err: 'unsupported' });
+      navigator.geolocation.getCurrentPosition(function (p) { res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }); },
+        function (e) { res({ err: e.code === 1 ? 'denied' : e.code === 3 ? 'timeout' : 'unavailable' }); },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    });
+  }
+
+  // ---------- 啟動 ----------
+  function boot() {
+    api('/api/me').then(function (d) {
+      if (typeof d.now === 'number') skew = d.now - Date.now();
+      if (d.disabled) return show('vDisabled');
+      if (d.bound) { me = d; return enterMain(); }
+      if (isIOS && !standalone && ls('ck_skip_home') !== '1') return show('vHome');
+      show('vStart'); if (/ClockinApp/.test(navigator.userAgent)) $('allowTip').style.display = 'none';
+    }).catch(function () { show('vMain'); setStatus('err', '網路錯誤', ''); });
+  }
+
+  $('btnSkipHome').onclick = function () { ls('ck_skip_home', '1'); show('vStart'); };
+
+  // ---------- 輸入姓名 → 允許定位 → 綁定（一次完成）----------
+  function rErr(t) { $('rMsg').className = 'msg big err'; $('rMsg').innerHTML = t; }
+  $('code').oninput = function () {
+    var n = $('code').value.replace(/\s+/g, ''); $('rMsg').textContent = '';
+    $('btnStart').textContent = n.length >= 2 ? '我是「' + n + '」，開始' : '開始';
+  };
+  $('btnStart').onclick = function () {
+    var name = $('code').value.replace(/\s+/g, '');
+    if (name.length < 2) return rErr('請輸入你的姓名');
+    $('btnStart').disabled = true; $('rMsg').className = 'msg big'; $('rMsg').textContent = '定位中…';
+    getPos().then(function (p) {
+      if (p.err === 'denied') {
+        $('btnStart').disabled = false;
+        return rErr('定位被拒絕了<br>' + (isIOS ? 'iPhone：設定 → 隱私權 → 定位服務 → 打開<br>再到 Safari 網站 → 選「使用 App 期間」' : '按網址列左邊的圖示 → 權限 → 位置 → 允許') + '<br>改好後再按一次');
+      }
+      return api('/api/register', { method: 'POST', body: JSON.stringify({ name: name, empNo: $('empNo').value.replace(/\s+/g, ''), consent: true }) }).then(function (d) {
+        $('btnStart').disabled = false;
+        if (!d.ok) { if (d.needNo) $('empNo').focus(); return rErr(d.error || '綁定失敗'); }
+        ls('ck_dev', d.token); ls('ck_consent', '1'); $('rMsg').textContent = ''; boot();
+      });
+    }).catch(function () { $('btnStart').disabled = false; rErr('網路錯誤，請再按一次'); });
+  };
+
+  // ---------- 主畫面：打開即打卡 ----------
+  function setStatus(kind, title, detail) { $('status').className = 'card ' + (kind || ''); $('sTitle').textContent = title; $('sDetail').textContent = detail || ''; }
+
+  function enterMain() {
+    show('vMain'); $('who').textContent = me.name;
+    var box = $('shifts'); box.innerHTML = '';
+    $('shiftCard').style.display = me.upcoming.length ? '' : 'none';
+    me.upcoming.forEach(function (s) {
+      var a = tw(s.start), b = tw(s.end), d = document.createElement('div'); d.className = 'shift';
+      var l = document.createElement('span'); l.textContent = a.md + '（' + a.w + '）' + s.name;
+      var r = document.createElement('span'); r.textContent = a.hm + '–' + b.hm; d.appendChild(l); d.appendChild(r); box.appendChild(d);
+    });
+    record(); loadMy();
+  }
+
+  // ---------- 補卡／請假／核准 ----------
+  var my = null;
+  function el(t, txt, cls) { var e = document.createElement(t); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; }
+  function seg(id, onPick) {
+    var box = $(id);
+    box.onclick = function (ev) { var b = ev.target.closest('button'); if (!b || !box.contains(b)) return;
+      [].forEach.call(box.querySelectorAll('button'), function (x) { x.classList.toggle('on', x === b); }); if (onPick) onPick(b); };
+  }
+  function segVal(id) { var b = $(id).querySelector('button.on'); return b ? (b.getAttribute('data-v') || b.textContent) : ''; }
+  function reqItem(r, mine) {
+    var d = el('div', null, 'req');
+    var top = el('div'); if (!mine) top.appendChild(el('b', r.name + '　'));
+    top.appendChild(el('b', r.kindName + '：' + r.text)); d.appendChild(top);
+    var sub = el('div', null, 'sub');
+    sub.appendChild(el('span', r.statusName, 'tag t-' + r.status));
+    sub.appendChild(document.createTextNode((r.reason || '') + (mine ? '' : '　📍' + (r.at || (r.lat != null ? '無對應案場' : '沒有定位'))) + (r.note ? '　主管：' + r.note : '')));
+    d.appendChild(sub);
+    if (mine && r.status === 'pending') {
+      var a = el('div', null, 'acts'), c = el('button', '取消申請');
+      c.onclick = function () { c.disabled = true; api('/api/request/cancel', { method: 'POST', body: JSON.stringify({ id: r.id }) }).then(loadMy); };
+      a.appendChild(c); d.appendChild(a);
+    }
+    if (!mine) {
+      var a2 = el('div', null, 'acts'), ok = el('button', '同意', 'ok'), no = el('button', '退回');
+      var go = function (yes) {
+        ok.disabled = no.disabled = true;
+        api('/api/approve', { method: 'POST', body: JSON.stringify({ id: r.id, ok: yes, note: '' }) }).then(function (x) { if (x.error) { sub.appendChild(el('div', x.error)); } loadMy(); });
+      };
+      ok.onclick = function () { go(true); };
+      no.onclick = function () { if (no.textContent !== '確定退回') { no.textContent = '確定退回'; no.style.borderColor = '#b91c1c'; no.style.color = '#b91c1c'; return; } go(false); };
+      a2.appendChild(ok); a2.appendChild(no); d.appendChild(a2);
+    }
+    return d;
+  }
+  function loadMy() {
+    api('/api/my').then(function (d) {
+      if (d.error) return; my = d;
+      $('apprCard').style.display = d.approvals.length ? '' : 'none'; $('apprN').textContent = '（' + d.approvals.length + '）';
+      var al = $('apprList'); al.innerHTML = ''; d.approvals.forEach(function (r) { al.appendChild(reqItem(r, false)); });
+      $('myCard').style.display = d.mine.length ? '' : 'none';
+      var ml = $('myList'); ml.innerHTML = ''; d.mine.slice(0, 6).forEach(function (r) { ml.appendChild(reqItem(r, true)); });
+    });
+  }
+  [].forEach.call(document.querySelectorAll('[data-back]'), function (b) { b.onclick = function () { show('vMain'); loadMy(); }; });
+
+  // 補卡
+  function shiftOf(date) { return my && my.recent.filter(function (x) { return x.date === date; })[0]; }
+  function fixDefaultTime() {
+    var day = segVal('fDay'), io = segVal('fIo'), sh = shiftOf(day);
+    $('fTime').value = sh ? (io === 'in' ? sh.start : sh.end) : tw(now()).hm;
+  }
+  seg('fIo', fixDefaultTime); seg('fDay', fixDefaultTime); seg('fWhy');
+  $('btnFix').onclick = function () {
+    var box = $('fDay'); box.innerHTML = '';
+    var base = my ? my.today : null;
+    for (var i = 0; i < 3; i++) {
+      var ms = now() - i * 86400e3, x = tw(ms), iso = new Date(ms + 8 * 3600e3).toISOString().slice(0, 10);
+      var b = el('button', (i === 0 ? '今天' : i === 1 ? '昨天' : '前天') + ' ' + x.md); b.setAttribute('data-v', iso); if (i === 0) b.className = 'on'; box.appendChild(b);
+    }
+    $('fMsg').textContent = ''; $('fNote').value = ''; [].forEach.call($('fWhy').querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+    fixDefaultTime(); show('vFix'); window.scrollTo(0, 0);
+  };
+  $('fGo').onclick = function () {
+    var why = segVal('fWhy'), note = $('fNote').value.trim();
+    if (!why) { $('fMsg').className = 'msg big err'; $('fMsg').textContent = '請點一個原因'; return; }
+    $('fGo').disabled = true; $('fMsg').className = 'msg big'; $('fMsg').textContent = '送出中…';
+    getPos().then(function (p) {
+      var b = { kind: 'punch', io: segVal('fIo'), date: segVal('fDay'), time: $('fTime').value, reason: why + (note ? '：' + note : '') };
+      if (!p.err) { b.lat = p.lat; b.lng = p.lng; b.acc = p.acc; }
+      return api('/api/request', { method: 'POST', body: JSON.stringify(b) });
+    }).then(function (d) {
+      $('fGo').disabled = false;
+      if (d.error) { $('fMsg').className = 'msg big err'; $('fMsg').textContent = d.error; return; }
+      $('fMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
+    }).catch(function () { $('fGo').disabled = false; $('fMsg').className = 'msg big err'; $('fMsg').textContent = '網路錯誤，請再按一次'; });
+  };
+
+  // 請假
+  seg('lAll', function (b) { $('lTimes').style.display = b.getAttribute('data-v') === '1' ? 'none' : 'flex'; });
+  $('btnLeave').onclick = function () {
+    var sel = $('lType'); sel.innerHTML = '';
+    ((my && my.leaveTypes) || []).forEach(function (t) { sel.appendChild(el('option', t)); });
+    var today = new Date(now() + 8 * 3600e3).toISOString().slice(0, 10);
+    $('lFrom').value = today; $('lTo').value = today; $('lT1').value = '09:00'; $('lT2').value = '18:00'; $('lNote').value = ''; $('lMsg').textContent = '';
+    show('vLeave'); window.scrollTo(0, 0);
+  };
+  $('lFrom').onchange = function () { if ($('lTo').value < $('lFrom').value) $('lTo').value = $('lFrom').value; };
+  $('lGo').onclick = function () {
+    var all = segVal('lAll') === '1';
+    var b = { kind: 'leave', leave_type: $('lType').value, date: $('lFrom').value, date_to: $('lTo').value, allDay: all, time: $('lT1').value, time_to: $('lT2').value, reason: $('lNote').value.trim() };
+    $('lGo').disabled = true; $('lMsg').className = 'msg big'; $('lMsg').textContent = '送出中…';
+    api('/api/request', { method: 'POST', body: JSON.stringify(b) }).then(function (d) {
+      $('lGo').disabled = false;
+      if (d.error) { $('lMsg').className = 'msg big err'; $('lMsg').textContent = d.error; return; }
+      $('lMsg').textContent = '已送出 ✓ 等主管核准'; setTimeout(function () { show('vMain'); loadMy(); }, 1200);
+    }).catch(function () { $('lGo').disabled = false; $('lMsg').className = 'msg big err'; $('lMsg').textContent = '網路錯誤，請再按一次'; });
+  };
+
+  var busy = false, lastRun = 0;
+  function record() {
+    if (busy) return; busy = true; lastRun = Date.now(); $('btnRetry').disabled = true;
+    setStatus('', '定位中', '');
+    getPos().then(function (p) {
+      $('permHelp').style.display = p.err === 'denied' ? 'block' : 'none';
+      return api('/api/ping', { method: 'POST', body: JSON.stringify(p) }).then(function (d) {
+        if (d._status === 401) { ls('ck_dev', ''); me = null; return boot(); }
+        if (typeof d.now === 'number') skew = d.now - Date.now();
+        var t = tw(d.now || now());
+        if (!d.ok) return setStatus('err', d.error || '記錄失敗', '');
+        var place = !d.located ? '沒有定位' : d.at ? d.at.name : '無對應上班地點';
+        if (d.hit) {
+          var label = d.hit.kind === 'in' ? '上班' : '下班';
+          if (!d.located) return setStatus('warn', label + '：沒有定位', t.hm);
+          if (d.inRange === false) return setStatus('warn', label + '：不在工地範圍', t.hm + '　' + place);
+          return setStatus('ok', label + '打卡 ✓', t.hm + '　' + place);
+        }
+        setStatus(d.at ? 'ok' : '', '已記錄 ' + t.hm, place);
+      });
+    }).catch(function () { setStatus('err', '網路錯誤', ''); })
+      .then(function () { busy = false; $('btnRetry').disabled = false; });
+  }
+  $('btnRetry').onclick = record;
+  // 從背景切回來時再記一次（30 秒內不重複）
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && me && Date.now() - lastRun > 30e3) { api('/api/me').then(function (d) { if (d.bound) { me = d; } record(); loadMy(); }); } });
+
+  boot();
+})();
+</script>
+</body>
+</html>

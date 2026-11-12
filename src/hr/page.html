@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<title>人事掃描建檔</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #fff; --ink: #1c2430; --muted: #6b7686; --line: #dfe4ea;
+    --brand: #1f3a5f; --brand-2: #2f6fb3; --warn-bg: #fff6d6; --warn: #8a6500;
+    --err-bg: #fde8e8; --err: #a12424; --ok: #1e7a46; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--brand); color: #fff;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 0; }
+  header .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .who { font-size: 13px; opacity: .85; }
+  header .who button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff;
+    border-radius: 6px; padding: 2px 8px; margin-left: 6px; font-size: 12px; }
+  nav { display: flex; gap: 4px; margin-top: 8px; }
+  nav button { flex: 1; background: none; border: 0; color: rgba(255,255,255,.75); padding: 10px 4px;
+    font-size: 15px; border-bottom: 3px solid transparent; }
+  nav button.on { color: #fff; border-bottom-color: #fff; font-weight: 600; }
+  main { padding: 14px 14px calc(90px + env(safe-area-inset-bottom)); max-width: 720px; margin: 0 auto; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 14px; margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; color: var(--ink); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand-2); border-color: transparent; }
+  .uncertain input, .uncertain select { background: var(--warn-bg); border-color: #e9cf6d; }
+  .uncertain label::after { content: "　請核對"; color: var(--warn); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .grid .full { grid-column: 1 / -1; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 10px;
+    padding: 12px 16px; font: inherit; font-weight: 600; background: var(--brand-2); color: #fff; width: 100%; }
+  .btn.secondary { background: #e8eef6; color: var(--brand); }
+  .btn.danger { background: var(--err-bg); color: var(--err); }
+  .btn:disabled { opacity: .5; }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+  .msg { padding: 10px 12px; border-radius: 8px; font-size: 14px; margin: 10px 0; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .msg.ok { background: #e3f5ea; color: var(--ok); }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 13px; }
+  /* 相機 */
+  .cam { position: fixed; inset: 0; background: #000; z-index: 20; display: flex; flex-direction: column; }
+  .cam video { flex: 1; width: 100%; object-fit: cover; }
+  .cam .frame { position: absolute; left: 6%; right: 6%; top: 50%; transform: translateY(-60%);
+    aspect-ratio: 85.6 / 54; border: 3px solid rgba(255,255,255,.9); border-radius: 14px;
+    box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); pointer-events: none; }
+  .cam .frame.doc { aspect-ratio: 210 / 297; left: 10%; right: 10%; top: 45%; transform: translateY(-50%); max-height: 70%; }
+  .cam .tip { position: absolute; left: 0; right: 0; top: calc(16px + env(safe-area-inset-top)); text-align: center;
+    color: #fff; font-size: 15px; text-shadow: 0 1px 3px #000; padding: 0 20px; }
+  .cam .bar { display: flex; align-items: center; justify-content: space-around; padding: 18px 0 calc(18px + env(safe-area-inset-bottom)); background: #000; }
+  .cam .shutter { width: 72px; height: 72px; border-radius: 50%; border: 5px solid #fff; background: rgba(255,255,255,.25); }
+  .cam .bar button.txt { background: none; border: 0; color: #fff; font-size: 16px; width: 80px; }
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .thumbs img { width: 96px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+  /* 名單 */
+  .rec { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .rec:last-child { border-bottom: 0; }
+  .rec .n { font-weight: 600; } .rec .s { font-size: 13px; color: var(--muted); }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+  .tag.pending { background: var(--warn-bg); color: var(--warn); }
+  .tag.confirmed { background: #e3f0fb; color: var(--brand-2); }
+  .tag.imported { background: #e3f5ea; color: var(--ok); }
+  .spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: #222; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 30; font-size: 14px; max-width: 90%; }
+  .viewer { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 25; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }
+  .viewer img { max-width: 100%; max-height: 80vh; object-fit: contain; }
+  .viewer .btn { width: auto; min-width: 120px; }
+  .file { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .file:last-child { border-bottom: 0; }
+  .file .fn { font-size: 14px; color: var(--ink); word-break: break-all; }
+  .file .fm { font-size: 12px; color: var(--muted); }
+  .file button { border: 0; background: #e8eef6; color: var(--brand); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 14px; white-space: nowrap; }
+  .file button.del { background: var(--err-bg); color: var(--err); }
+  table.log { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.log td { border-bottom: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<!-- 登入 -->
+<section id="login" class="hidden">
+  <main style="padding-top: 12vh">
+    <div class="card">
+      <h2>人事掃描建檔</h2>
+      <p class="muted">請輸入你的姓名與公司提供的通行碼。所有查詢與修改都會記錄操作人。</p>
+      <label for="lg-name">姓名</label>
+      <input id="lg-name" autocomplete="name">
+      <label for="lg-code">通行碼</label>
+      <input id="lg-code" type="password" autocomplete="current-password">
+      <label style="display:flex;align-items:center;gap:8px;color:var(--ink)"><input id="lg-remember" type="checkbox" style="width:auto" checked> 在這支手機記住我</label>
+      <div id="lg-msg"></div>
+      <button class="btn" id="lg-btn" style="margin-top:12px">登入</button>
+    </div>
+  </main>
+</section>
+
+<!-- 主畫面 -->
+<section id="app" class="hidden">
+  <header>
+    <div class="top">
+      <h1>人事掃描建檔</h1>
+      <div class="who"><span id="who"></span><button id="logout">登出</button></div>
+    </div>
+    <nav>
+      <button data-tab="scan" class="on" id="tab-scan">拍照建檔</button>
+      <button data-tab="list">人員檔案</button>
+      <button data-tab="admin" id="tab-admin">匯出／紀錄</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 拍照建檔 -->
+    <div id="pane-scan">
+      <div class="card" id="scan-start">
+        <h2>1. 拍照</h2>
+        <label for="doc-type">文件類型</label>
+        <select id="doc-type">
+          <option value="auto">自動判斷</option>
+          <option value="身分證正面">身分證正面</option>
+          <option value="身分證背面">身分證背面</option>
+          <option value="居留證">居留證</option>
+          <option value="到職資料表">到職資料表／表單</option>
+          <option value="履歷">履歷</option>
+        </select>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="open-cam">📷 開啟相機</button>
+          <button class="btn secondary" id="pick-file">從相簿選</button>
+        </div>
+        <input type="file" id="file" accept="image/*" class="hidden">
+        <p class="muted" style="margin-top:10px">同一個人可以連拍多張（例如身分證正反面），後拍的照片只會補上空白欄位。</p>
+        <label style="display:flex;align-items:center;gap:8px;color:var(--ink);font-size:15px;margin-top:10px"><input type="checkbox" id="keep-photos" style="width:auto" checked> 儲存時把原始照片存進個人檔案</label>
+        <div class="thumbs" id="thumbs"></div>
+        <div id="scan-msg"></div>
+      </div>
+
+      <div class="card" id="form-card">
+        <h2>2. 核對資料</h2>
+        <div id="form-msg"></div>
+        <form id="rec-form" class="grid" autocomplete="off">
+          <div><label>姓名 *</label><input name="name" required></div>
+          <div><label>身分證字號</label><input name="id_no" maxlength="10" style="text-transform:uppercase"></div>
+          <div><label>性別</label><select name="gender"><option value=""></option><option>男</option><option>女</option></select></div>
+          <div><label>出生日期</label><input name="birth_date" type="date"></div>
+          <div><label>手機</label><input name="mobile" inputmode="tel"></div>
+          <div><label>市話</label><input name="phone" inputmode="tel"></div>
+          <div class="full"><label>Email</label><input name="email" type="email"></div>
+          <div class="full"><label>戶籍地址</label><input name="address_reg"></div>
+          <div class="full"><label>通訊地址</label><input name="address_mail"></div>
+          <div><label>緊急聯絡人</label><input name="emergency_name"></div>
+          <div><label>關係</label><input name="emergency_relation"></div>
+          <div class="full"><label>緊急聯絡電話</label><input name="emergency_phone" inputmode="tel"></div>
+          <div class="full"><label>派駐社區</label>
+            <input id="dept-search" placeholder="輸入社區名稱或代號搜尋，例如 H1101" list="dept-list">
+            <datalist id="dept-list"></datalist>
+            <input type="hidden" name="dept_id">
+            <div class="muted" id="dept-picked"></div>
+          </div>
+          <div><label>職位</label><input name="title"></div>
+          <div><label>派應</label><input name="dispatch_type"></div>
+          <div><label>月薪（元）</label><input name="salary" inputmode="numeric"></div>
+          <div><label>投保級距（元）</label><input name="insurance_salary" inputmode="numeric"></div>
+          <div><label>到職日</label><input name="hire_date" type="date"></div>
+          <div class="full"><label>備註</label><textarea name="note" rows="2"></textarea></div>
+          <div class="full"><label style="display:flex;align-items:center;gap:8px;color:var(--ink);font-size:15px"><input type="checkbox" id="confirmed" style="width:auto"> 我已逐欄核對過，資料正確</label></div>
+        </form>
+        <div class="row" style="margin-top:12px">
+          <button class="btn secondary" id="clear-form">清空</button>
+          <button class="btn" id="save">儲存</button>
+        </div>
+        <button class="btn danger hidden" id="delete" style="margin-top:8px">刪除這筆資料</button>
+      </div>
+
+      <div class="card hidden" id="files-card">
+        <h2>個人檔案</h2>
+        <div id="files-list" class="muted">載入中…</div>
+        <div class="row" style="margin-top:12px">
+          <select id="up-kind">
+            <option>身分證正面</option><option>身分證背面</option><option>居留證</option><option>到職資料表</option>
+            <option>履歷</option><option>勞健保資料</option><option>證照</option><option>合約</option><option selected>其他</option>
+          </select>
+          <button class="btn secondary" id="up-btn">上傳檔案</button>
+        </div>
+        <input type="file" id="up-file" accept="image/*,application/pdf" class="hidden">
+        <p class="muted">可上傳照片或 PDF，單檔 10MB 以內。</p>
+      </div>
+    </div>
+
+    <!-- 名單查詢 -->
+    <div id="pane-list" class="hidden">
+      <div class="card">
+        <div class="row">
+          <input id="q" placeholder="搜尋姓名、部門（編輯以上可搜身分證、手機）" style="flex:3">
+          <select id="q-status" style="flex:2">
+            <option value="">全部狀態</option><option value="pending">待核對</option>
+            <option value="confirmed">已確認</option><option value="imported">已匯入 NUEIP</option>
+          </select>
+        </div>
+        <div class="muted" id="list-count" style="margin-top:8px"></div>
+        <div id="list"></div>
+        <button class="btn secondary hidden" id="more" style="margin-top:10px">載入更多</button>
+      </div>
+    </div>
+
+    <!-- 管理 -->
+    <div id="pane-admin" class="hidden">
+      <div class="card">
+        <h2>匯出名單（給 NUEIP 匯入用）</h2>
+        <label for="ex-status">匯出範圍</label>
+        <select id="ex-status">
+          <option value="confirmed">已確認（尚未匯入）</option>
+          <option value="">全部</option>
+          <option value="pending">待核對</option>
+          <option value="imported">已匯入</option>
+        </select>
+        <button class="btn" id="export" style="margin-top:12px">下載 CSV（Excel 可開）</button>
+        <p class="muted">匯入 NUEIP 後，可在名單中把狀態改為「已匯入 NUEIP」。</p>
+      </div>
+      <div class="card">
+        <h2>操作紀錄（最近 200 筆）</h2>
+        <button class="btn secondary" id="load-audit">重新整理</button>
+        <table class="log" id="audit"></table>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- 相機 -->
+<div class="cam hidden" id="cam">
+  <video id="video" playsinline autoplay muted></video>
+  <div class="frame" id="cam-frame"></div>
+  <div class="tip" id="cam-tip">把證件放進框內，避開燈光反光，拿穩再按快門</div>
+  <div class="bar">
+    <button class="txt" id="cam-cancel">取消</button>
+    <button class="shutter" id="shutter" aria-label="拍照"></button>
+    <button class="txt" id="cam-flip">切換鏡頭</button>
+  </div>
+</div>
+<canvas id="canvas" class="hidden"></canvas>
+<div class="viewer hidden" id="viewer"><img id="viewer-img" alt=""><button class="btn secondary" id="viewer-close">關閉</button></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+               set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+               del(k) { try { localStorage.removeItem(k); } catch {} } };
+  const STATUS_TXT = { pending: '待核對', confirmed: '已確認', imported: '已匯入 NUEIP' };
+  const state = { code: '', who: '', role: '', depts: [], editingId: null, listOffset: 0, facing: 'environment', stream: null, photos: [] };
+
+  // ---------- API ----------
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      ...opts,
+      headers: { 'content-type': 'application/json', 'x-access-code': state.code,
+                 'x-user-name': encodeURIComponent(state.who), ...(opts.headers || {}) },
+    });
+    if (res.status === 401 && path !== '/api/login') { logout(); throw new Error('登入已失效，請重新登入'); }
+    const ct = res.headers.get('content-type') || '';
+    const data = ct.includes('json') ? await res.json() : await res.text();
+    if (!res.ok) { const e = new Error((data && data.error) || ('錯誤 ' + res.status)); e.status = res.status; e.data = data; throw e; }
+    return data;
+  }
+  function msg(el, text, kind = 'err') { $(el).innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : ''; }
+  function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function toast(t) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+
+  // ---------- 登入 ----------
+  async function login(code, who, remember) {
+    state.code = code; state.who = who;
+    const r = await api('/api/login', { method: 'POST', body: '{}' });
+    state.role = r.role;
+    if (remember) { LS.set('hr_code', code); LS.set('hr_who', who); }
+    showApp();
+  }
+  function logout() { LS.del('hr_code'); state.code = ''; state.role = ''; $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); }
+  $('#logout').onclick = logout;
+  $('#lg-btn').onclick = async () => {
+    const who = $('#lg-name').value.trim(); const code = $('#lg-code').value.trim();
+    if (!who || !code) return msg('#lg-msg', '請填姓名與通行碼');
+    $('#lg-btn').disabled = true;
+    try { await login(code, who, $('#lg-remember').checked); msg('#lg-msg', ''); }
+    catch (e) { msg('#lg-msg', e.message); }
+    finally { $('#lg-btn').disabled = false; }
+  };
+  $('#lg-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#lg-btn').click(); });
+
+  const ROLE_TXT = { viewer: '檢視', editor: '建檔', admin: '管理員' };
+  async function showApp() {
+    $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+    $('#who').textContent = `${state.who}（${ROLE_TXT[state.role]}）`;
+    const canEdit = state.role !== 'viewer';
+    $('#tab-scan').classList.toggle('hidden', !canEdit);
+    $('#tab-admin').classList.toggle('hidden', state.role !== 'admin');
+    switchTab(canEdit ? 'scan' : 'list');
+    try {
+      const d = await api('/api/departments');
+      state.depts = d.items;
+      $('#dept-list').innerHTML = d.items.map((x) => `<option value="${esc(deptLabel(x))}">`).join('');
+    } catch (e) { toast('部門清單載入失敗：' + e.message); }
+  }
+  const deptLabel = (d) => (d.code ? d.code + ' ' : '') + d.name;
+
+  // ---------- 分頁 ----------
+  document.querySelectorAll('nav button').forEach((b) => b.onclick = () => switchTab(b.dataset.tab));
+  function switchTab(t) {
+    document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+    ['scan', 'list', 'admin'].forEach((p) => $('#pane-' + p).classList.toggle('hidden', p !== t));
+    if (t === 'list') loadList(true);
+    if (t === 'admin') loadAudit();
+  }
+
+  // ---------- 相機 ----------
+  $('#open-cam').onclick = openCam;
+  $('#cam-cancel').onclick = closeCam;
+  $('#cam-flip').onclick = () => { state.facing = state.facing === 'environment' ? 'user' : 'environment'; openCam(); };
+  async function openCam() {
+    stopStream();
+    const isCard = !/表|履歷/.test($('#doc-type').value);
+    $('#cam-frame').classList.toggle('doc', !isCard);
+    $('#cam-tip').textContent = isCard ? '把證件放進框內，避開燈光反光，拿穩再按快門' : '把整張文件放進框內，盡量拍正、拍清楚';
+    try {
+      state.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: state.facing, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
+      $('#video').srcObject = state.stream;
+      $('#cam').classList.remove('hidden');
+    } catch (e) {
+      msg('#scan-msg', '無法開啟相機（' + (e.name || e.message) + '）。請允許相機權限，或改用「從相簿選」。');
+    }
+  }
+  function stopStream() { if (state.stream) { state.stream.getTracks().forEach((t) => t.stop()); state.stream = null; } }
+  function closeCam() { stopStream(); $('#cam').classList.add('hidden'); }
+  $('#shutter').onclick = () => {
+    const v = $('#video');
+    if (!v.videoWidth) return;
+    // 依取景框裁切（框外留 4% 邊）
+    const vw = v.videoWidth, vh = v.videoHeight;
+    const rect = v.getBoundingClientRect(), fr = $('#cam-frame').getBoundingClientRect();
+    const scale = Math.max(rect.width / vw, rect.height / vh);
+    const offX = (vw * scale - rect.width) / 2, offY = (vh * scale - rect.height) / 2;
+    let sx = (fr.left - rect.left + offX) / scale, sy = (fr.top - rect.top + offY) / scale;
+    let sw = fr.width / scale, sh = fr.height / scale;
+    const padX = sw * 0.04, padY = sh * 0.04;
+    sx = Math.max(0, sx - padX); sy = Math.max(0, sy - padY);
+    sw = Math.min(vw - sx, sw + padX * 2); sh = Math.min(vh - sy, sh + padY * 2);
+    const c = $('#canvas'); const k = Math.min(1, 1400 / Math.max(sw, sh));
+    c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    const data = c.toDataURL('image/jpeg', 0.82);
+    closeCam();
+    if (isBlurry(c)) toast('照片可能有點模糊，若辨識不準請重拍');
+    runExtract(data);
+  };
+  // 簡易清晰度檢查（拉普拉斯變異數）
+  function isBlurry(c) {
+    try {
+      const w = Math.min(400, c.width), h = Math.round(c.height * w / c.width);
+      const t = document.createElement('canvas'); t.width = w; t.height = h;
+      const ctx = t.getContext('2d'); ctx.drawImage(c, 0, 0, w, h);
+      const p = ctx.getImageData(0, 0, w, h).data; const g = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) g[i] = p[i * 4] * .299 + p[i * 4 + 1] * .587 + p[i * 4 + 2] * .114;
+      let sum = 0, sq = 0, n = 0;
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x; const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+        sum += l; sq += l * l; n++;
+      }
+      const mean = sum / n; return (sq / n - mean * mean) < 60;
+    } catch { return false; }
+  }
+
+  $('#pick-file').onclick = () => $('#file').click();
+  $('#file').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try { runExtract(await shrink(f)); } catch (err) { msg('#scan-msg', '讀取照片失敗：' + err.message); }
+  };
+  function shrink(file, maxSide = 1600) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(); const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const c = $('#canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('無法開啟這張圖片')); };
+      img.src = url;
+    });
+  }
+
+  async function runExtract(dataUrl) {
+    const t = document.createElement('img'); t.src = dataUrl; $('#thumbs').appendChild(t);
+    const t0 = Date.now();
+    msg('#scan-msg', '辨識中…', 'warn');
+    const tick = setInterval(() => msg('#scan-msg', `辨識中… ${Math.round((Date.now() - t0) / 1000)} 秒`, 'warn'), 1000);
+    $('#open-cam').disabled = $('#pick-file').disabled = true;
+    try {
+      const r = await api('/api/extract', { method: 'POST', body: JSON.stringify({ image: dataUrl, doc_type: $('#doc-type').value }) });
+      state.photos.push({ data: dataUrl, kind: kindName(r.doc_type, $('#doc-type').value) });
+      const filled = fillForm(r.fields, r.uncertain || []);
+      const notes = [];
+      if (filled) notes.push(`已填入 ${filled} 個欄位`); else notes.push('沒有新的欄位可填入');
+      if ((r.uncertain || []).length) notes.push('黃色欄位請特別核對');
+      msg('#scan-msg', notes.join('，') + `。（${Math.round((Date.now() - t0) / 1000)} 秒）`, 'ok');
+      showWarnings(r.warnings);
+      $('#form-card').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) { msg('#scan-msg', e.message); t.remove(); }
+    finally { clearInterval(tick); $('#open-cam').disabled = $('#pick-file').disabled = false; }
+  }
+
+  const KIND_MAP = { id_front: '身分證正面', id_back: '身分證背面', arc: '居留證', form: '到職資料表', resume: '履歷' };
+  function kindName(aiType, picked) { return picked && picked !== 'auto' ? picked : (KIND_MAP[aiType] || '其他'); }
+
+  // ---------- 表單 ----------
+  const form = $('#rec-form');
+  function fillForm(fields, uncertain, overwrite = false) {
+    let n = 0;
+    for (const [k, v] of Object.entries(fields || {})) {
+      if (v == null || v === '') continue;
+      if (k === 'dept_name') { if (!form.dept_id.value) matchDept(v); continue; }
+      const el = form.elements[k]; if (!el) continue;
+      if (!overwrite && el.value) continue;
+      el.value = v; n++;
+      if (uncertain.includes(k)) el.parentElement.classList.add('uncertain');
+    }
+    return n;
+  }
+  function matchDept(text) {
+    const t = String(text).trim();
+    const d = state.depts.find((x) => x.name === t || x.code === t) || state.depts.find((x) => x.name.includes(t) || t.includes(x.name));
+    if (d) setDept(d); else $('#dept-search').value = t;
+  }
+  function setDept(d) {
+    form.dept_id.value = d ? d.id : '';
+    $('#dept-search').value = d ? deptLabel(d) : '';
+    $('#dept-picked').textContent = d ? (d.path ? d.path + ' > ' : '') + d.name : '';
+  }
+  $('#dept-search').addEventListener('change', () => {
+    const v = $('#dept-search').value.trim();
+    const d = state.depts.find((x) => deptLabel(x) === v) || state.depts.find((x) => x.code && x.code.toLowerCase() === v.toLowerCase());
+    if (d) setDept(d); else { form.dept_id.value = ''; $('#dept-picked').textContent = v ? '找不到這個部門，請從清單選擇' : ''; }
+  });
+  form.addEventListener('input', (e) => e.target.parentElement.classList.remove('uncertain'));
+  function showWarnings(w) { msg('#form-msg', (w && w.length) ? '⚠ ' + w.join('；') : '', 'warn'); }
+
+  function resetForm() {
+    form.reset(); setDept(null); state.editingId = null; $('#confirmed').checked = false;
+    form.querySelectorAll('.uncertain').forEach((x) => x.classList.remove('uncertain'));
+    $('#thumbs').innerHTML = ''; msg('#scan-msg', ''); msg('#form-msg', '');
+    $('#save').textContent = '儲存'; $('#delete').classList.add('hidden');
+    if ($('#status-box')) $('#status-box').remove();
+    state.photos = []; $('#files-card').classList.add('hidden');
+    $('#scan-start').classList.remove('hidden');
+  }
+  $('#clear-form').onclick = resetForm;
+
+  $('#save').onclick = async () => {
+    const body = {};
+    for (const el of form.elements) if (el.name) body[el.name] = el.value.trim();
+    if (!body.name) return msg('#form-msg', '姓名必填');
+    if (!body.dept_id && $('#dept-search').value.trim()) return msg('#form-msg', '派駐社區請從清單中選擇');
+    if (state.editingId && $('#status-sel')) body.status = $('#status-sel').value;
+    else body.status = $('#confirmed').checked ? 'confirmed' : 'pending';
+    if (form.querySelector('.uncertain') && body.status !== 'pending' &&
+        !confirm('還有黃色欄位沒改過，確定都核對正確了嗎？')) return;
+    $('#save').disabled = true;
+    try {
+      const r = state.editingId
+        ? await api('/api/records/' + state.editingId, { method: 'PUT', body: JSON.stringify(body) })
+        : await api('/api/records', { method: 'POST', body: JSON.stringify(body) });
+      let note = '';
+      if (!state.editingId && state.photos.length && $('#keep-photos').checked) {
+        let ok = 0;
+        for (const [i, ph] of state.photos.entries()) {
+          try {
+            await api(`/api/records/${r.id}/files`, { method: 'POST', body: JSON.stringify({ data: ph.data, kind: ph.kind, filename: `${body.name}-${ph.kind}-${i + 1}.jpg` }) });
+            ok++;
+          } catch (e) { note = `（${state.photos.length - ok} 張照片存檔失敗：${e.message}）`; }
+        }
+        if (ok) note = note || `，${ok} 張照片已存進個人檔案`;
+      }
+      toast(`已儲存：${body.name}${note}` + (r.warnings && r.warnings.length ? '（有提醒事項）' : ''));
+      resetForm();
+    } catch (e) {
+      if (e.status === 409 && e.data && e.data.existing_id && confirm(e.message + '\n要開啟那筆資料嗎？')) openRecord(e.data.existing_id);
+      else msg('#form-msg', e.message);
+    } finally { $('#save').disabled = false; }
+  };
+  $('#delete').onclick = async () => {
+    if (!state.editingId || !confirm('確定刪除這筆資料？刪除後無法復原。')) return;
+    try { await api('/api/records/' + state.editingId, { method: 'DELETE' }); toast('已刪除'); resetForm(); switchTab('list'); }
+    catch (e) { msg('#form-msg', e.message); }
+  };
+
+  // ---------- 名單 ----------
+  let qTimer;
+  $('#q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => loadList(true), 350); });
+  $('#q-status').onchange = () => loadList(true);
+  $('#more').onclick = () => loadList(false);
+  async function loadList(reset) {
+    if (reset) { state.listOffset = 0; $('#list').innerHTML = ''; }
+    const p = new URLSearchParams({ q: $('#q').value.trim(), status: $('#q-status').value, limit: 30, offset: state.listOffset });
+    try {
+      const r = await api('/api/records?' + p);
+      $('#list-count').textContent = `共 ${r.total} 筆`;
+      $('#list').insertAdjacentHTML('beforeend', r.items.map((x) => `
+        <div class="rec" data-id="${x.id}">
+          <div><div class="n">${esc(x.name)} <span class="s">${esc(x.gender || '')}</span></div>
+          <div class="s">${esc(x.dept_name || '未指定派駐社區')}${x.title ? '・' + esc(x.title) : ''}</div>
+          <div class="s">${esc(x.id_no || '')}${x.mobile ? '・' + esc(x.mobile) : ''}</div></div>
+          <div style="text-align:right"><span class="tag ${x.status}">${STATUS_TXT[x.status] || x.status}</span>
+          ${x.file_count ? `<div class="s" style="margin-top:4px">📎 ${x.file_count}</div>` : ''}</div>
+        </div>`).join(''));
+      state.listOffset += r.items.length;
+      $('#more').classList.toggle('hidden', state.listOffset >= r.total);
+    } catch (e) { $('#list').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }
+  $('#list').addEventListener('click', (e) => { const r = e.target.closest('.rec'); if (r) openRecord(r.dataset.id); });
+
+  async function openRecord(id) {
+    try {
+      const { item } = await api('/api/records/' + id);
+      if (state.role === 'viewer') return showReadonly(item);
+      resetForm(); switchTab('scan');
+      state.editingId = item.id; state.editingStatus = item.status;
+      $('#scan-start').classList.add('hidden');
+      for (const el of form.elements) if (el.name && item[el.name] != null) el.value = item[el.name];
+      setDept(state.depts.find((d) => d.id === item.dept_id) || null);
+      $('#confirmed').checked = item.status !== 'pending';
+      $('#save').textContent = '更新';
+      $('#delete').classList.toggle('hidden', state.role !== 'admin');
+      if (item.status !== 'imported') msg('#form-msg', '');
+      else msg('#form-msg', '這筆已匯入 NUEIP，修改後請記得也到 NUEIP 更新。', 'warn');
+      addStatusSelect(item.status);
+      $('#files-card').classList.remove('hidden');
+      document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === 'list'));
+      loadFiles();
+      window.scrollTo({ top: 0 });
+    } catch (e) { toast(e.message); }
+  }
+  function addStatusSelect(cur) {
+    let box = $('#status-box');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'status-box'; box.className = 'full';
+      box.innerHTML = '<label>狀態</label><select id="status-sel"><option value="pending">待核對</option><option value="confirmed">已確認</option><option value="imported">已匯入 NUEIP</option></select>';
+      form.appendChild(box);
+      $('#status-sel').onchange = () => { $('#confirmed').checked = $('#status-sel').value !== 'pending'; };
+    }
+    $('#status-sel').value = cur; box.classList.remove('hidden');
+  }
+
+  $('#confirmed').addEventListener('change', () => {
+    const s = $('#status-sel'); if (!s) return;
+    s.value = $('#confirmed').checked ? (s.value === 'pending' ? 'confirmed' : s.value) : 'pending';
+  });
+
+  function showReadonly(x) {
+    const rows = [['姓名', x.name], ['性別', x.gender], ['身分證字號', x.id_no], ['出生日期', x.birth_date], ['手機', x.mobile],
+      ['派駐社區', x.dept_name], ['職位', x.title], ['派應', x.dispatch_type], ['到職日', x.hire_date], ['狀態', STATUS_TXT[x.status]]];
+    alert(rows.filter((r) => r[1]).map((r) => r[0] + '：' + r[1]).join('\n'));
+  }
+
+  // ---------- 個人檔案 ----------
+  const fmtSize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  async function loadFiles() {
+    if (!state.editingId) return;
+    try {
+      const r = await api(`/api/records/${state.editingId}/files`);
+      $('#files-list').innerHTML = r.items.length ? r.items.map((f) => `
+        <div class="file" data-id="${f.id}" data-mime="${esc(f.mime)}" data-name="${esc(f.filename)}">
+          <div><div class="fn">${f.mime.startsWith('image/') ? '🖼' : '📄'} ${esc(f.kind)}</div>
+          <div class="fm">${esc(f.filename)}・${fmtSize(f.size)}・${esc(f.uploaded_by || '')} ${esc((f.uploaded_at || '').slice(0, 16))}</div></div>
+          <div class="row" style="flex:0 0 auto"><button class="view">查看</button>${state.role === 'admin' ? '<button class="del">刪除</button>' : ''}</div>
+        </div>`).join('') : '<div class="muted">還沒有檔案</div>';
+    } catch (e) { $('#files-list').innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }
+  async function fetchFile(id) {
+    const res = await fetch('/api/files/' + id, { headers: { 'x-access-code': state.code, 'x-user-name': encodeURIComponent(state.who) } });
+    if (!res.ok) { let m = '讀取失敗'; try { m = (await res.json()).error || m; } catch {} throw new Error(m); }
+    return res.blob();
+  }
+  $('#files-list').addEventListener('click', async (e) => {
+    const row = e.target.closest('.file'); if (!row) return;
+    const id = row.dataset.id;
+    if (e.target.classList.contains('del')) {
+      if (!confirm('確定刪除這個檔案？刪除後無法復原。')) return;
+      try { await api('/api/files/' + id, { method: 'DELETE' }); toast('已刪除'); loadFiles(); } catch (err) { toast(err.message); }
+      return;
+    }
+    if (!e.target.classList.contains('view')) return;
+    try {
+      e.target.disabled = true;
+      const blob = await fetchFile(id);
+      if (row.dataset.mime.startsWith('image/')) {
+        const url = URL.createObjectURL(blob);
+        $('#viewer-img').src = url; $('#viewer').classList.remove('hidden');
+      } else {
+        await saveBlob(blob, row.dataset.name, row.dataset.mime);
+      }
+    } catch (err) { toast(err.message); } finally { e.target.disabled = false; }
+  });
+  $('#viewer-close').onclick = () => { URL.revokeObjectURL($('#viewer-img').src); $('#viewer-img').src = ''; $('#viewer').classList.add('hidden'); };
+  async function saveBlob(blob, name, mime) {
+    if (window.HRApp && window.HRApp.saveFile) {
+      const b64 = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+      window.HRApp.saveFile(name, mime, b64);
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      toast('已下載 ' + name);
+    }
+  }
+  $('#up-btn').onclick = () => $('#up-file').click();
+  $('#up-file').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f || !state.editingId) return;
+    if (f.size > 10 * 1024 * 1024 && !f.type.startsWith('image/')) return toast('檔案太大（上限 10MB）');
+    $('#up-btn').disabled = true; $('#up-btn').textContent = '上傳中…';
+    try {
+      let data, name = f.name;
+      if (f.type.startsWith('image/') && !/heic|heif/.test(f.type)) { data = await shrink(f, 2000); name = name.replace(/\.\w+$/, '') + '.jpg'; }
+      else data = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(new Error('讀取檔案失敗')); r.readAsDataURL(f); });
+      await api(`/api/records/${state.editingId}/files`, { method: 'POST', body: JSON.stringify({ data, filename: name, kind: $('#up-kind').value }) });
+      toast('已上傳'); loadFiles();
+    } catch (err) { toast(err.message); }
+    finally { $('#up-btn').disabled = false; $('#up-btn').textContent = '上傳檔案'; }
+  };
+
+  // ---------- 管理 ----------
+  $('#export').onclick = async () => {
+    try {
+      const st = $('#ex-status').value;
+      const res = await fetch('/api/export.csv' + (st ? '?status=' + st : ''), {
+        headers: { 'x-access-code': state.code, 'x-user-name': encodeURIComponent(state.who) } });
+      if (!res.ok) throw new Error((await res.json()).error || '匯出失敗');
+      const blob = await res.blob();
+      const name = (res.headers.get('content-disposition') || '').match(/filename="(.+?)"/)?.[1] || 'hr-export.csv';
+      if (window.HRApp && window.HRApp.saveFile) {
+        const b64 = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
+        window.HRApp.saveFile(name, 'text/csv', b64);
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      }
+      toast('已下載 ' + name);
+    } catch (e) { toast(e.message); }
+  };
+  $('#load-audit').onclick = loadAudit;
+  async function loadAudit() {
+    if (state.role !== 'admin') return;
+    try {
+      const r = await api('/api/audit');
+      $('#audit').innerHTML = r.items.map((x) => `<tr><td>${esc(x.at.slice(5, 16))}</td><td>${esc(x.who)}</td><td>${esc(x.action)}</td><td>${esc(x.target || '')}</td></tr>`).join('');
+    } catch (e) { $('#audit').innerHTML = `<tr><td>${esc(e.message)}</td></tr>`; }
+  }
+
+  // ---------- 啟動 ----------
+  const savedCode = LS.get('hr_code'), savedWho = LS.get('hr_who');
+  if (savedWho) $('#lg-name').value = savedWho;
+  if (savedCode && savedWho) login(savedCode, savedWho, true).catch(() => { $('#login').classList.remove('hidden'); });
+  else $('#login').classList.remove('hidden');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>

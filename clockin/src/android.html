@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f766e">
+<title>洪英打卡 安卓 App</title>
+<link rel="icon" href="/fav-64.png">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; background:#f4f6f5; color:#1c2421; }
+  main { max-width:480px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:30px; text-align:center; margin:8px 0 18px; }
+  .dl { display:block; text-align:center; background:#0f766e; color:#fff; text-decoration:none; font-size:28px; font-weight:800; padding:22px 0; border-radius:18px; box-shadow:0 4px 0 #0b5a54; }
+  .dl:active { transform:translateY(3px); box-shadow:0 1px 0 #0b5a54; }
+  .step { background:#fff; border-radius:18px; padding:18px 18px 18px 74px; margin-top:16px; position:relative; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .num { position:absolute; left:16px; top:16px; width:44px; height:44px; border-radius:50%; background:#0f766e; color:#fff; font-size:26px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .t { font-size:23px; font-weight:800; line-height:1.35; }
+  .d { font-size:19px; line-height:1.6; margin-top:6px; color:#3b4542; }
+  .btn { display:inline-block; font-size:18px; font-weight:800; color:#1a56db; border:2px solid #1a56db; border-radius:999px; padding:2px 12px; margin:2px 2px; white-space:nowrap; background:#eef3ff; }
+  .warn { background:#fff7e6; border:2px solid #f0b429; }
+  .warn .num { background:#d97706; }
+  .web { display:block; text-align:center; margin-top:24px; font-size:18px; color:#5f6b67; }
+  #notAndroid { display:none; background:#fee2e2; color:#7f1d1d; border-radius:14px; padding:14px; font-size:19px; margin-bottom:16px; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <div id="notAndroid">這是<b>安卓</b>手機專用。<br>iPhone 請掃另一個 QR Code。</div>
+  <div style="text-align:center"><img src="/icon-180.png" alt="洪英" style="width:96px;height:96px;border-radius:22px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>
+  <h1>洪英打卡 App</h1>
+
+  <a class="dl" id="dl" href="/app.apk">⬇ 下載 App</a>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="t">按上面綠色「下載 App」</div>
+    <div class="d">如果跳出提示，按 <span class="btn">下載</span> 或 <span class="btn">仍要下載</span></div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="t">下載好，按 <span class="btn">開啟</span></div>
+    <div class="d">找不到？往下拉通知列，按「洪英打卡」的下載檔</div>
+  </div>
+
+  <div class="step warn">
+    <div class="num">3</div>
+    <div class="t">出現「不明來源」或「已封鎖」</div>
+    <div class="d">按 <span class="btn">設定</span> → 打開 <span class="btn">允許這個來源</span> → 按返回 → 按 <span class="btn">安裝</span><br>Play 安全防護跳出來：按 <span class="btn">仍要安裝</span></div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="t">打開「洪英打卡」，輸入姓名</div>
+    <div class="d">打自己的名字，按兩次 <span class="btn">確認</span></div>
+  </div>
+
+  <div class="step warn">
+    <div class="num">5</div>
+    <div class="t">定位一定要允許</div>
+    <div class="d">先按 <span class="btn">使用應用程式時允許</span><br>再選 <span class="btn">一律允許</span>（或「永遠允許」）<br>精確位置要 <span class="btn">開啟</span></div>
+  </div>
+
+  <div class="step">
+    <div class="num">6</div>
+    <div class="t">其他也都按「允許」</div>
+    <div class="d">通知 <span class="btn">允許</span>　鬧鐘 <span class="btn">開啟</span>　省電 <span class="btn">允許</span></div>
+  </div>
+
+  <a class="web" href="/">不想裝 App？按這裡用網頁打卡</a>
+</main>
+<script>
+  if (!/Android/i.test(navigator.userAgent)) document.getElementById('notAndroid').style.display = 'block';
+</script>
+</body>
+</html>

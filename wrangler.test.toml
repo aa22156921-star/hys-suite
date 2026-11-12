@@ -1,0 +1,35 @@
+# 洪英整合系統（打卡＋人事建檔＋薪資查詢）
+name = "hys"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# .html / .svg 當文字匯入
+rules = [{ type = "Text", globs = ["**/*.html", "**/*.svg"], fallthrough = true }]
+
+# 打卡資料庫（和舊打卡系統共用同一份）
+[[d1_databases]]
+binding = "DB"
+database_name = "clockin-db"
+database_id = "cfe01c4a-04c5-4ebc-80ea-f03e23f7db44"
+
+# 人事建檔資料庫（和舊人事建檔共用同一份）
+[[d1_databases]]
+binding = "HR"
+database_name = "hr-scan-db"
+database_id = "73020c1f-4101-479f-beb7-bb36e69982cc"
+
+# 證件辨識
+
+# 薪資查詢：直接轉送到原本的薪資 Worker
+
+[vars]
+AI_MODEL = "@cf/qwen/qwen3.8-27b"
+
+[observability]
+enabled = true
+
+# 祕密（Cloudflare 後台 → hys → 設定 → 變數和祕密）：
+#   ADMIN_KEY     整合後台密碼（沿用打卡後台那組）
+#   ADMIN_CODE / EDITOR_CODE / VIEWER_CODE   人事建檔三組通行碼（沿用 hr-scan 那三組）
+#   ANTHROPIC_API_KEY（選用）

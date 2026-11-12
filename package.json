@@ -1,0 +1,17 @@
+{
+  "name": "hys-suite",
+  "version": "1.0.0",
+  "description": "洪英整合系統",
+  "scripts": {
+    "build:clockin": "cd clockin && node build.mjs && cp dist/_worker.js ../src/clockin.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "wrangler": "^4.161.0"
+  },
+  "private": true
+}

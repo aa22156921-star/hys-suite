@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'tw.clockin.admin'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'tw.clockin.admin'
+        minSdk 26
+        targetSdk 34
+        versionCode 1000 + runNumber
+        versionName "2.0.${runNumber}"
+        buildConfigField 'String', 'BASE_URL', '"https://hys.aa22156921.workers.dev"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../app/release.jks')
+            storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+            keyAlias 'clockin'
+            keyPassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

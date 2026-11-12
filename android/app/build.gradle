@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 每次 GitHub 打包自動加版本號（覆蓋安裝用）。整合版從 2.0.x 起跳，比舊打卡版 1.0.x 新，舊 App 會直接升級過來
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'tw.clockin.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'tw.clockin.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 1000 + runNumber
+        versionName "2.0.${runNumber}"
+        buildConfigField 'String', 'BASE_URL', '"https://hys.aa22156921.workers.dev"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            // 固定簽章，之後更新版本才能直接覆蓋安裝
+            storeFile file('release.jks')
+            storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+            keyAlias 'clockin'
+            keyPassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
