@@ -135,6 +135,7 @@ function autoChecks(str, nowMs) {
 
 // 幹部、機動的追蹤時段。auto_ping = '班表'：依排班（班前 15 分到班後 15 分可定位；每班定時抓 3 次：上班後 30 分、班中、下班前 30 分）
 const SHIFT_MODE = '班表';
+const NO_TRACK = '不追蹤'; // 稽核等職務：平時不定位，只在外出申報時段定位；也不會被職稱規則自動開啟
 const CADRE_RE = /經理|協理|襄理|督導|副理/;
 const MOBILE_RE = /機動/;
 async function trackState(env, emp, now) {
@@ -431,7 +432,7 @@ async function apiBoss(req, env, url) {
   const sites = await activeSites(env), now = Date.now();
   const { results } = await DB.prepare(`SELECT e.id, e.name, e.emp_no, e.auto_ping, s.title, s.dept_name,
       (SELECT COUNT(*) FROM devices d WHERE d.emp_id = e.id AND (d.ua LIKE '%ClockinApp%' OR d.ua = 'iPhone 捷徑')) AS app
-    FROM employees e LEFT JOIN staff s ON s.uid = e.nueip_uid WHERE e.active = 1 AND e.auto_ping IS NOT NULL ORDER BY s.dept_name, e.name`).all();
+    FROM employees e LEFT JOIN staff s ON s.uid = e.nueip_uid WHERE e.active = 1 AND e.auto_ping IS NOT NULL AND e.auto_ping <> '不追蹤' ORDER BY s.dept_name, e.name`).all();
   const tracked = [];
   for (const e of results) {
     const p = await DB.prepare('SELECT ms, lat, lng FROM pings WHERE emp_id = ? AND lat IS NOT NULL ORDER BY ms DESC LIMIT 1').bind(e.id).first();
@@ -835,7 +836,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
   }
   if (p === '/employees/auto' && M === 'POST') { // 幹部定時定位
     const v = String(b.auto_ping || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-    if (v && v !== SHIFT_MODE && !parseAuto(v)) return json({ error: '格式像這樣：1-5 09:00,12:00,18:00，或填「班表」（依排班時間追蹤）' }, 400);
+    if (v && v !== SHIFT_MODE && v !== NO_TRACK && !parseAuto(v)) return json({ error: '格式像這樣：1-5 09:00,12:00,18:00；填「班表」依排班追蹤；填「不追蹤」只在外出申報時段定位' }, 400);
     await DB.prepare('UPDATE employees SET auto_ping = ? WHERE id = ?').bind(v || null, b.id).run();
     return json({ ok: true });
   }

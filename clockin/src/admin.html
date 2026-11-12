@@ -728,7 +728,7 @@
         var no = el('input'); no.value = e.emp_no || ''; no.size = 7; no.placeholder = '未填'; no.style.padding = '4px 6px';
         no.onchange = function () { api('/employees/empno', { id: e.id, emp_no: no.value.trim() }).then(function () { no.style.background = '#dcfce7'; }).catch(function (x) { alert(x.message || x); }); };
         td(tr, no);
-        var ap = el('input'); ap.value = e.auto_ping || ''; ap.size = 18; ap.placeholder = '例 1-5 09:00,12:00,18:00 或 班表'; ap.style.padding = '4px 6px';
+        var ap = el('input'); ap.value = e.auto_ping || ''; ap.size = 18; ap.placeholder = '例 1-5 09:00,12:00,18:00／班表／不追蹤'; ap.style.padding = '4px 6px';
         ap.onchange = function () { api('/employees/auto', { id: e.id, auto_ping: ap.value.trim() }).then(function () { ap.style.background = '#dcfce7'; }).catch(function (x) { ap.style.background = '#fee2e2'; alert(x.message || x); }); };
         td(tr, ap);
         var rm = el('input'); rm.type = 'checkbox'; rm.checked = !!e.roam; rm.title = '幹部、督導、機動：不比對案場，只記時間與位置';
@@ -916,7 +916,7 @@
       [['應追蹤', d.list.length], ['已裝 App／捷徑', on], ['只綁網頁（抓不到背景位置）', web], ['尚未綁定', d.list.length - on - web]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
       d.list.forEach(function (r) {
         var tr = el('tr'); td(tr, r.kind); td(tr, r.emp_no); td(tr, r.name); td(tr, r.title); td(tr, r.dept_name || '');
-        td(tr, r.auto_ping === '班表' ? '依班表' : (r.auto_ping || '—'));
+        td(tr, r.auto_ping === '班表' ? '依班表' : r.auto_ping === '不追蹤' ? '不追蹤（只在外出時段）' : (r.auto_ping || '—'));
         td(tr, el('span', r.app > 0 ? '已裝 App' : r.dev > 0 ? '只綁網頁' : '未綁定', 'tag ' + (r.app > 0 ? 't-ok' : r.dev > 0 ? 't-late' : 't-missing')));
         td(tr, r.last || '—'); tb.appendChild(tr);
       });
