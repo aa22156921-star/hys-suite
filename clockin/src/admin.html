@@ -128,8 +128,11 @@
     <section class="sec" id="s-staff">
       <div class="card"><div class="row"><input id="stQ" placeholder="搜尋姓名、員編、案場、職稱" style="min-width:220px"><button class="primary" id="stLoad">重新整理</button>
         <button id="stMerge">名冊對應員工</button><button id="stCsv">匯出 Excel</button><span class="muted" id="stMsg"></span></div>
-        <p class="muted" style="margin:8px 0 0">每天早上從 NUEIP 複製一份（員編、姓名、部門、職稱、到職日），只讀不改 NUEIP。員工第一次打開打卡要輸入「姓名＋員編」，名冊對得上才能綁定。</p>
+        <p class="muted" style="margin:8px 0 0">每天早上從 NUEIP 複製一份（員編、姓名、部門、職稱、到職日），只讀不改 NUEIP。員工打開打卡只要輸入姓名；名冊裡同名只有一位就自動帶入員編，對不到的會列在下面「待補員編」。</p>
         <div class="stats" id="stStats" style="margin-top:10px"></div></div>
+      <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待補員編（已綁定、名冊對不到）</h2>
+        <p class="muted" style="margin:0 0 8px">請到人易新增或確認此人的員工編號，再到「員工」分頁填上員編，系統就會自動對上。</p>
+        <div class="scroll"><table><thead><tr><th>姓名</th><th>目前員編</th><th>綁定日</th></tr></thead><tbody id="stUnmatched"></tbody></table></div></div>
       <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
     </section>
 
@@ -362,7 +365,7 @@
       });
       if (!d.items.length) { var tr = el('tr'); var c = td(tr, '沒有異常 👍'); c.colSpan = 5; c.className = 'muted'; tb.appendChild(tr); }
       var todo = [];
-      if (d.noEmpNo.length) todo.push('沒有 NUEIP 員編（無法匯入）：' + d.noEmpNo.join('、'));
+      if (d.noEmpNo.length) todo.push('已綁定但人事名冊對不到（請到人易新增或確認員編，再到「員工」填員編）：' + d.noEmpNo.join('、'));
       if (d.noSiteDepts.length) todo.push('NUEIP 案場還沒有工地座標（到「工地」新增，名稱相同即可）：' + d.noSiteDepts.join('、'));
       $('tTodo').style.display = todo.length ? '' : 'none'; $('tTodoBody').innerHTML = ''; todo.forEach(function (t) { $('tTodoBody').appendChild(el('p', t)); });
     }).catch(err('tMsg'));
@@ -425,6 +428,8 @@
       var st = $('stStats'); st.innerHTML = '';
       [['名冊人數', STAFF.length], ['已綁定打卡', bound], ['尚未綁定', STAFF.length - bound]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
       $('stMsg').textContent = d.synced ? '最後同步 ' + d.synced : '';
+      var um = $('stUnmatched'); um.innerHTML = ''; $('stUnWrap').style.display = d.unmatched.length ? '' : 'none';
+      d.unmatched.forEach(function (e) { var tr = el('tr'); td(tr, e.name); td(tr, e.emp_no || '—'); td(tr, e.bound_at ? e.bound_at.slice(0, 10) : ''); um.appendChild(tr); });
       staffRows();
     });
   };

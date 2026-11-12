@@ -322,32 +322,28 @@ async function apiRegister(req, env) {
   const now = new Date().toISOString(), token = randHex(32), hash = await sha256(token), ua = (req.headers.get('User-Agent') || '').slice(0, 300);
   const DB = env.DB;
   // 姓名＋員編 對人事名冊：同名不同人、冒名綁定都擋得住
+  // 只要姓名：人事名冊裡姓名唯一就自動帶入員編；對不到或同名多人，照樣綁定，後台「資料待補」列出來給人資補
   const roster = (await DB.prepare('SELECT uid, emp_no, name, dept_id FROM staff WHERE name = ? AND active = 1').bind(name).all()).results;
-  let st = null;
-  if (roster.length) {
-    if (!no) return json({ error: '請輸入你的員工編號', needNo: true }, 400);
-    st = roster.find((r) => r.emp_no.toUpperCase() === no.toUpperCase());
-    if (!st) return json({ error: '姓名和員工編號對不起來，請再確認', needNo: true }, 400);
-  }
-  const SEL = 'SELECT id, name, active, max_devices, (SELECT COUNT(*) FROM devices WHERE emp_id = employees.id) AS n FROM employees WHERE ';
-  let emp = st ? (await DB.prepare(SEL + 'nueip_uid = ?').bind(st.uid).first()) || (await DB.prepare(SEL + 'emp_no = ? COLLATE NOCASE').bind(st.emp_no).first()) : null;
+  let st = roster.length === 1 ? roster[0] : (no ? roster.find((r) => r.emp_no.toUpperCase() === no.toUpperCase()) || null : null);
+  const SEL = 'SELECT id, name, nueip_uid, active, max_devices, (SELECT COUNT(*) FROM devices WHERE emp_id = employees.id) AS n FROM employees WHERE ';
+  let emp = st ? await DB.prepare(SEL + 'nueip_uid = ?').bind(st.uid).first() : null;
   if (!emp) {
-    const byName = await DB.prepare(SEL.replace('SELECT id,', 'SELECT id, nueip_uid,') + 'name = ?').bind(name).first();
-    // 同名但已對到另一個 NUEIP 帳號的，是別人，不能沿用
-    if (byName && !(st && byName.nueip_uid && byName.nueip_uid !== st.uid)) emp = byName;
+    const byName = await DB.prepare(SEL + 'name = ?').bind(name).first();
+    // 同名但已是另一位（已對上別的 NUEIP 帳號，或同名多人且已有人綁定）就另開一筆
+    const other = byName && ((st && byName.nueip_uid && byName.nueip_uid !== st.uid) || (!st && roster.length > 1 && byName.n > 0));
+    if (byName && !other) emp = byName;
   }
-  if (!emp && !st && (await DB.prepare('SELECT COUNT(*) AS n FROM staff').first()).n) return json({ error: '人事名冊查無「' + name + '」<br>請確認姓名，或請主管在後台先新增' }, 404);
   if (emp && !emp.active) return json({ error: '「' + emp.name + '」已停用，請聯絡管理員' }, 403);
   if (emp && emp.n >= emp.max_devices) return json({ error: '「' + emp.name + '」已綁定 ' + emp.n + ' 台裝置，請聯絡管理員' }, 409);
   if (!emp) {
-    const taken = await DB.prepare('SELECT id FROM employees WHERE name = ?').bind(name).first();
-    const store = taken ? name + '(' + st.emp_no + ')' : name;
+    let store = name;
+    for (let i = 2; await DB.prepare('SELECT id FROM employees WHERE name = ?').bind(store).first(); i++) store = name + '(' + (st && i === 2 ? st.emp_no : i) + ')';
     await DB.prepare('INSERT OR IGNORE INTO employees (name, reg_code, created_at) VALUES (?, ?, ?)').bind(store, regCode(), now).run();
     emp = await DB.prepare(SEL + 'name = ?').bind(store).first();
   }
   await DB.prepare('INSERT INTO devices (emp_id, device_hash, ua, bound_at) VALUES (?, ?, ?, ?)').bind(emp.id, hash, ua, now).run();
   await DB.prepare('UPDATE employees SET bound_at = COALESCE(bound_at, ?), bound_ua = COALESCE(bound_ua, ?), consent_at = COALESCE(consent_at, ?) WHERE id = ?').bind(now, ua, now, emp.id).run();
-  if (st) await DB.prepare('UPDATE employees SET emp_no = ?, nueip_uid = ?, nueip_dept = COALESCE(?, nueip_dept) WHERE id = ?').bind(st.emp_no, st.uid, st.dept_id, emp.id).run();
+  if (st && !emp.nueip_uid) await DB.prepare('UPDATE employees SET emp_no = ?, nueip_uid = ?, nueip_dept = COALESCE(?, nueip_dept) WHERE id = ?').bind(st.emp_no, st.uid, st.dept_id, emp.id).run();
   return json({ ok: true, name: emp.name, token }, 200, { 'Set-Cookie': cookieHeader(token) });
 }
 
@@ -537,7 +533,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
       }
     }
     const pend = (await DB.prepare(`SELECT ${REQ_COLS} FROM requests r JOIN employees e ON e.id = r.emp_id WHERE r.status = 'pending' ORDER BY r.id`).all()).results;
-    const noNo = (await DB.prepare('SELECT name FROM employees WHERE active = 1 AND (emp_no IS NULL OR emp_no = \'\')').all()).results.map((x) => x.name);
+    const noNo = (await DB.prepare("SELECT name FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id)").all()).results.map((x) => x.name);
     const noSite = (await DB.prepare(`SELECT dept_name FROM dept_map WHERE mode = 'none' ORDER BY dept_name`).all()).results.map((x) => x.dept_name);
     const sched = report.filter((r) => r.date === date).length, arrived = report.filter((r) => r.date === date && (r.inStatus === 'ok' || r.inStatus === 'late')).length;
     return json({ date, items, pending: await decorate(env, pend), noEmpNo: noNo, noSiteDepts: noSite, summary: { scheduled: sched, arrived } });
@@ -558,7 +554,8 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
       (SELECT COUNT(*) FROM devices WHERE emp_id = e.id) AS devices FROM staff s LEFT JOIN employees e ON e.nueip_uid = s.uid
       WHERE s.active = 1 ORDER BY s.dept_name, s.name`).all();
     const synced = results.reduce((m, r) => Math.max(m, r.synced_ms || 0), 0);
-    return json({ staff: results, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
+    const unmatched = (await DB.prepare("SELECT id, name, emp_no, bound_at FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id) ORDER BY bound_at DESC").all()).results;
+    return json({ staff: results, unmatched, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
   }
   if (p === '/staff/merge' && M === 'POST') return json({ ok: true, merged: await mergeRoster(DB) });
   if (p === '/audit' && M === 'GET') {
@@ -622,7 +619,10 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const no = String(b.emp_no || '').trim().slice(0, 30);
     if (no && !/^[A-Za-z0-9_-]+$/.test(no)) return json({ error: '員工編號只能是英數字' }, 400);
     await DB.prepare('UPDATE employees SET emp_no = ? WHERE id = ?').bind(no || null, b.id).run();
-    return json({ ok: true });
+    // 填的員編在人事名冊裡 → 一併對上 NUEIP 帳號與部門
+    const st = no ? await DB.prepare('SELECT uid, dept_id, name FROM staff WHERE emp_no = ? COLLATE NOCASE AND active = 1').bind(no).first() : null;
+    if (st) await DB.prepare('UPDATE employees SET nueip_uid = ?, nueip_dept = COALESCE(?, nueip_dept) WHERE id = ?').bind(st.uid, st.dept_id, b.id).run();
+    return json({ ok: true, matched: st ? st.name : null });
   }
   if (p === '/employees/roam' && M === 'POST') { // 幹部／機動：不比對案場
     await DB.prepare('UPDATE employees SET roam = ? WHERE id = ?').bind(b.roam ? 1 : 0, b.id).run();
@@ -715,6 +715,51 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     if (to < from || (twMs(to, '00:00') - twMs(from, '00:00')) > 62 * 86400e3) return json({ error: '日期區間最多兩個月' }, 400);
     const r = await buildReport(env, from, to);
     return json({ report: r.report, unscheduled: r.unscheduled, now: Date.now() });
+  }
+
+  // 薪資查核：整月出勤證據彙總（薪資條以管理處算好的為準，這裡核對「有沒有真的到班」）
+  if (p === '/payaudit' && M === 'GET') {
+    const mo = /^\d{4}-\d{2}$/.test(url.searchParams.get('month') || '') ? url.searchParams.get('month') : twDate(Date.now()).slice(0, 7);
+    const from = mo + '-01', last = new Date(Date.UTC(+mo.slice(0, 4), +mo.slice(5, 7), 0)).getUTCDate();
+    const today = twDate(Date.now()), to = (mo + '-' + String(last).padStart(2, '0')) < today ? mo + '-' + String(last).padStart(2, '0') : today;
+    if (to < from) return json({ month: mo, people: [], from, to });
+    const { report, unscheduled } = await buildReport(env, from, to);
+    const P = {};
+    for (const r of report) {
+      const k = r.name, x = (P[k] ||= { name: r.name, empNo: r.empNo, site: r.site, shifts: 0, done: 0, evidence: 0, partial: 0, absent: 0, missIn: 0, missOut: 0,
+        late: 0, lateMin: 0, leave: 0, manual: 0, offsite: 0, poorGps: 0, planMin: 0, workMin: 0, unsched: 0, roam: r.roam });
+      if (r.inStatus === 'pending' && r.outStatus === 'pending') continue; // 還沒到的班不算
+      x.shifts++;
+      const [sh, sm] = r.start.split(':').map(Number), [eh, em] = r.end.split(':').map(Number);
+      const plan = ((eh * 60 + em) - (sh * 60 + sm) + 1440) % 1440 || 1440;
+      if (r.inStatus === 'leave' && r.outStatus === 'leave') { x.leave++; continue; }
+      x.done++; x.planMin += plan;
+      if (!r.in && !r.out) { x.absent++; continue; }
+      if (!r.in) x.missIn++;
+      if (!r.out && r.outStatus === 'missing') x.missOut++;
+      if (r.inStatus === 'late') { x.late++; x.lateMin += (r.in && r.in.lateMin) || 0; }
+      const pts = [r.in, r.out].filter(Boolean);
+      x.manual += pts.filter((q) => q.manual).length;
+      x.offsite += pts.filter((q) => !q.manual && !q.inRange).length;
+      x.poorGps += pts.filter((q) => !q.manual && q.acc != null && q.acc > 150).length;
+      const good = (q) => q && !q.manual && q.inRange;
+      if (good(r.in) && good(r.out)) x.evidence++; else x.partial++;
+      if (r.in && r.out && r.in.ms && r.out.ms && r.out.ms > r.in.ms) x.workMin += Math.round((r.out.ms - r.in.ms) / 60e3);
+    }
+    for (const u of unscheduled) if (P[u.name]) P[u.name].unsched++;
+    const people = Object.values(P).map((x) => {
+      const rate = x.done ? Math.round(x.evidence / x.done * 100) : null;
+      const flags = [];
+      if (x.absent) flags.push('未到 ' + x.absent + ' 天');
+      if (x.manual >= 3) flags.push('補卡 ' + x.manual + ' 次');
+      if (x.offsite >= 2) flags.push('不在案場打卡 ' + x.offsite + ' 次');
+      if (x.missIn + x.missOut >= 3) flags.push('缺卡 ' + (x.missIn + x.missOut) + ' 次');
+      if (x.poorGps >= 3) flags.push('定位不準 ' + x.poorGps + ' 次');
+      if (rate != null && rate < 70) flags.push('完整證據只有 ' + rate + '%');
+      const risk = x.absent || (rate != null && rate < 70) || x.manual >= 5 || x.offsite >= 4 ? 'high' : flags.length ? 'mid' : 'low';
+      return { ...x, rate, flags, risk };
+    }).sort((a, b) => ({ high: 0, mid: 1, low: 2 }[a.risk] - { high: 0, mid: 1, low: 2 }[b.risk]) || a.name.localeCompare(b.name));
+    return json({ month: mo, from, to, people });
   }
 
   // NUEIP 打卡檔（給公司電腦的 NueAttendance 自動上傳用）
