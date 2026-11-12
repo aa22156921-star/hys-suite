@@ -31,6 +31,7 @@ import java.util.Set;
  * 另外引導員工開啟「一律允許定位」等權限，讓 App 在上下班時間自動打卡。
  */
 public class MainActivity extends Activity {
+    private long pausedAt = 0;
     private static final int REQ_BASIC = 1, REQ_BG = 2;
     private WebView web;
     private GeolocationPermissions.Callback pendingGeo;
@@ -93,6 +94,9 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        // 在背景超過 5 分鐘再回來：重新載入頁面，伺服器端的新版畫面馬上看得到
+        if (pausedAt > 0 && System.currentTimeMillis() - pausedAt > 5 * 60_000L) web.reload();
+        pausedAt = 0;
         nextSetupStep();
         if (hasFine() && hasBg()) Updater.check(this); // 權限都給了再檢查更新，避免同時跳太多視窗
     }
@@ -100,6 +104,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         CookieManager.getInstance().flush();
+        pausedAt = System.currentTimeMillis();
         web.onPause();
         super.onPause();
     }
