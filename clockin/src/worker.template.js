@@ -13,7 +13,7 @@ const EMPLOYEE_HTML = __EMPLOYEE_HTML__;
 const ADMIN_HTML = __ADMIN_HTML__;
 const ANDROID_HTML = __ANDROID_HTML__;
 const ICONS = __ICONS__;
-const APP_NAME = '洪英打卡';
+const APP_NAME = '洪英系統';
 const MANIFEST = JSON.stringify({ name: APP_NAME, short_name: APP_NAME, start_url: '/', scope: '/', display: 'standalone',
   background_color: '#ffffff', theme_color: '#e8b931',
   icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }] });

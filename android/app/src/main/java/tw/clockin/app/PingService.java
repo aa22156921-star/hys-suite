@@ -56,7 +56,7 @@ public class PingService extends Service {
         createChannels(this);
         Notification n = new Notification.Builder(this, CH_WORK)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                .setContentTitle("洪英打卡")
+                .setContentTitle("洪英系統")
                 .setContentText("打卡中")
                 .setOngoing(true)
                 .build();

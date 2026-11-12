@@ -26,7 +26,7 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 /**
- * 洪英打卡「後台」App：直接打開 /admin 管理頁面。
+ * 洪英系統「後台」App：直接打開 /admin 管理頁面。
  * 另外補上 WebView 本身做不到的：選檔案（匯入班表、上架 APK）、下載檔案（Excel、CSV、QR 圖片）。
  */
 public class AdminActivity extends Activity {

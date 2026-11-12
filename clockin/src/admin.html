@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>洪英打卡 後台</title>
+<title>洪英系統 後台</title>
 <link rel="icon" href="/fav-64.png">
 <style>
   :root { --brand:#0f766e; --bg:#f4f6f5; --text:#1c2421; --muted:#5f6b67; --line:#e2e8e6; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; }
@@ -50,7 +50,7 @@
 </head>
 <body>
 <main>
-  <h1><img src="/icon-180.png" alt="" style="width:34px;height:34px;vertical-align:-8px;margin-right:8px">洪英 整合後台</h1>
+  <h1><img src="/icon-180.png" alt="" style="width:34px;height:34px;vertical-align:-8px;margin-right:8px">洪英系統 後台</h1>
   <div style="margin:-4px 0 12px;display:flex;gap:8px;flex-wrap:wrap"><a class="tag t-ok" style="text-decoration:none;padding:6px 12px" href="/hr/">人事建檔</a><a class="tag t-ok" style="text-decoration:none;padding:6px 12px" href="/pay">薪資查詢</a></div>
 
   <div class="card" id="login">
@@ -945,14 +945,14 @@
     c.innerHTML = '<h2 style="margin-top:0"></h2>'
       + '<p class="muted">回報時間由後台「幹部定時定位」決定，以後改時間只要改後台，手機不用再動。代碼只顯示這一次。</p>'
       + '<ol style="line-height:1.9;padding-left:20px">'
-      + '<li>「捷徑」→ 右上 <b>＋</b> → 名稱打「洪英打卡回報」</li>'
+      + '<li>「捷徑」→ 右上 <b>＋</b> → 名稱打「洪英系統回報」</li>'
       + '<li>加入 <b>取得 URL 內容</b>，網址填「詢問網址」→ 展開 → 標頭新增 <b>X-Device</b>＝代碼（方法維持 GET）</li>'
       + '<li>加入 <b>如果</b>：「URL 的內容」<b>是</b> <b>1</b></li>'
       + '<li>在「如果」裡面加入 <b>取得目前位置</b></li>'
       + '<li>再加入 <b>取得 URL 內容</b>，網址填「回報網址」→ 方法 <b>POST</b> → 標頭 <b>X-Device</b>＝代碼 → 本文 <b>JSON</b>，數字欄位 <b>lat</b>＝目前位置的緯度、<b>lng</b>＝目前位置的經度</li>'
       + '<li>按 ▶ 試跑，允許定位</li>'
-      + '<li>「自動化」→ ＋ →「特定時間」→ 每天 → 選「<b>立即執行</b>」→「洪英打卡回報」。<b>每個整點各做一個</b>（建議 08:00～20:00，共 13 個）</li>'
-      + '<li>（建議）再加一個「App」→ 選 <b>LINE</b> →「已開啟」→ 立即執行 → 洪英打卡回報。他打開 LINE 時也會檢查，「立即定位」會更快</li>'
+      + '<li>「自動化」→ ＋ →「特定時間」→ 每天 → 選「<b>立即執行</b>」→「洪英系統回報」。<b>每個整點各做一個</b>（建議 08:00～20:00，共 13 個）</li>'
+      + '<li>（建議）再加一個「App」→ 選 <b>LINE</b> →「已開啟」→ 立即執行 → 洪英系統回報。他打開 LINE 時也會檢查，「立即定位」會更快</li>'
       + '</ol>'
       + '<p class="muted">手機每次只是問「要不要回報」，後台說不用就不會抓定位。整點觸發，所以設定 9:30 會在 10:00 回報。</p>';
     c.querySelector('h2').textContent = name + ' 的 iPhone 捷徑設定';

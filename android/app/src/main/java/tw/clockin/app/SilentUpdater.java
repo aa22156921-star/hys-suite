@@ -84,7 +84,7 @@ final class SilentUpdater {
         PendingIntent pi = PendingIntent.getActivity(ctx, 7, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(ctx, PingService.CH_RESULT)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle("洪英打卡 有新版本 " + (ver == null ? "" : ver))
+                .setContentTitle("洪英系統 有新版本 " + (ver == null ? "" : ver))
                 .setContentText("點一下完成更新")
                 .setContentIntent(pi)
                 .setAutoCancel(true)
