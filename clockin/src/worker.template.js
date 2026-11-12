@@ -544,7 +544,9 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     const noNo = (await DB.prepare("SELECT name FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id)").all()).results.map((x) => x.name);
     const noSite = (await DB.prepare(`SELECT dept_name FROM dept_map WHERE mode = 'none' ORDER BY dept_name`).all()).results.map((x) => x.dept_name);
     const sched = report.filter((r) => r.date === date).length, arrived = report.filter((r) => r.date === date && (r.inStatus === 'ok' || r.inStatus === 'late')).length;
-    return json({ date, items, pending: await decorate(env, pend), noEmpNo: noNo, noSiteDepts: noSite, summary: { scheduled: sched, arrived } });
+    const dupNo = (await DB.prepare("SELECT UPPER(emp_no) AS no, GROUP_CONCAT(name, '、') AS names FROM employees WHERE active = 1 AND emp_no IS NOT NULL AND emp_no <> '' GROUP BY UPPER(emp_no) HAVING COUNT(*) > 1").all()).results.map((x) => x.no + '（' + x.names + '）');
+    const sameName = (await DB.prepare("SELECT e.name, GROUP_CONCAT(s.emp_no, '、') AS nos FROM employees e JOIN staff s ON s.name = e.name AND s.active = 1 WHERE e.active = 1 AND e.nueip_uid IS NULL GROUP BY e.id HAVING COUNT(*) > 1").all()).results.map((x) => x.name + '（名冊有 ' + x.nos + '）');
+    return json({ date, items, pending: await decorate(env, pend), noEmpNo: noNo, dupNo, sameName, noSiteDepts: noSite, summary: { scheduled: sched, arrived } });
   }
   // 申請一覽與核准
   if (p === '/requests' && M === 'GET') {
@@ -563,7 +565,8 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
       WHERE s.active = 1 ORDER BY s.dept_name, s.name`).all();
     const synced = results.reduce((m, r) => Math.max(m, r.synced_ms || 0), 0);
     const unmatched = (await DB.prepare("SELECT id, name, emp_no, bound_at FROM employees WHERE active = 1 AND nueip_uid IS NULL AND EXISTS (SELECT 1 FROM devices WHERE emp_id = employees.id) ORDER BY bound_at DESC").all()).results;
-    return json({ staff: results, unmatched, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
+    const dupNo = (await DB.prepare("SELECT UPPER(emp_no) AS no, GROUP_CONCAT(name, '、') AS names FROM employees WHERE active = 1 AND emp_no IS NOT NULL AND emp_no <> '' GROUP BY UPPER(emp_no) HAVING COUNT(*) > 1").all()).results;
+    return json({ staff: results, unmatched, dupNo, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
   }
   if (p === '/staff/merge' && M === 'POST') return json({ ok: true, merged: await mergeRoster(DB) });
   if (p === '/audit' && M === 'GET') {
@@ -602,6 +605,7 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
 
   // 員工
   if (p === '/employees' && M === 'GET') {
+    await mergeRoster(DB);
     const { results } = await DB.prepare(`SELECT e.id, e.name, e.emp_no, e.nueip_uid, (SELECT title FROM staff WHERE uid = e.nueip_uid) AS title, (SELECT dept_name FROM staff WHERE uid = e.nueip_uid) AS dept_name, e.auto_ping, e.roam, e.site_id, s.name AS site, e.active, e.created_at, e.bound_at, e.consent_at, e.max_devices,
       (SELECT COUNT(*) FROM devices WHERE emp_id = e.id) AS devices,
       (SELECT GROUP_CONCAT(ua, '||') FROM devices WHERE emp_id = e.id) AS uas,

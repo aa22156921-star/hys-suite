@@ -130,7 +130,7 @@
         <button id="stMerge">名冊對應員工</button><button id="stCsv">匯出 Excel</button><span class="muted" id="stMsg"></span></div>
         <p class="muted" style="margin:8px 0 0">每天早上從 NUEIP 複製一份（員編、姓名、部門、職稱、到職日），只讀不改 NUEIP。員工打開打卡只要輸入姓名；名冊裡同名只有一位就自動帶入員編，對不到的會列在下面「待補員編」。</p>
         <div class="stats" id="stStats" style="margin-top:10px"></div></div>
-      <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待補員編（已綁定、名冊對不到）</h2>
+      <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待處理員編（沒有員編、對不到名冊、或員編重複）</h2>
         <p class="muted" style="margin:0 0 8px">請到人易新增或確認此人的員工編號，再到「員工」分頁填上員編，系統就會自動對上。</p>
         <div class="scroll"><table><thead><tr><th>姓名</th><th>目前員編</th><th>綁定日</th></tr></thead><tbody id="stUnmatched"></tbody></table></div></div>
       <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
@@ -326,8 +326,25 @@
   $('key').onkeydown = function (e) { if (e.key === 'Enter') $('loginBtn').click(); };
   function enter() { $('login').style.display = 'none'; $('app').style.display = ''; refreshBase().then(function () { tab('today'); }); }
   function refreshBase() {
-    return Promise.all([api('/sites'), api('/shifts'), api('/employees')]).then(function (r) { SITES = r[0].sites; SHIFTS = r[1].shifts; EMPS = r[2].employees; });
+    return Promise.all([api('/sites'), api('/shifts'), api('/employees')]).then(function (r) { SITES = r[0].sites; SHIFTS = r[1].shifts; EMPS = r[2].employees; buildNoMap(); });
   }
+  // 所有分頁（包含以後新增的）：表格裡只要出現員工姓名，就在旁邊小字標上員編；沒有員編標「未編」
+  var NOMAP = {};
+  function buildNoMap() { NOMAP = {}; EMPS.forEach(function (e) { if (e.active) NOMAP[e.name] = e.emp_no || ''; }); tagNames(document.getElementById('app')); }
+  function tagNames(root) {
+    if (!root || !root.querySelectorAll) return;
+    var cells = Array.prototype.slice.call(root.querySelectorAll('td, .name'));
+    if (root.matches && root.matches('td, .name')) cells.push(root);
+    cells.forEach(function (c) {
+      if (c.dataset.no || c.children.length || !c.textContent || c.closest('#s-staff, #s-emp')) return;
+      var n = c.textContent.trim(); if (!(n in NOMAP)) return;
+      c.dataset.no = '1';
+      var sm = document.createElement('small'); sm.textContent = NOMAP[n] || '未編'; sm.style.cssText = 'margin-left:5px;font-size:11px;color:' + (NOMAP[n] ? 'var(--muted,#6b7280)' : '#b91c1c');
+      c.appendChild(sm);
+    });
+  }
+  new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (nd) { if (nd.nodeType === 1 && nd.tagName !== 'SMALL') tagNames(nd); }); }); })
+    .observe(document.body, { childList: true, subtree: true });
 
   // ---------- 分頁 ----------
   var loaders = {};
@@ -366,6 +383,8 @@
       if (!d.items.length) { var tr = el('tr'); var c = td(tr, '沒有異常 👍'); c.colSpan = 5; c.className = 'muted'; tb.appendChild(tr); }
       var todo = [];
       if (d.noEmpNo.length) todo.push('已綁定但人事名冊對不到（請到人易新增或確認員編，再到「員工」填員編）：' + d.noEmpNo.join('、'));
+      if (d.dupNo && d.dupNo.length) todo.push('員編重複（同一個員編給了不只一人，請確認）：' + d.dupNo.join('、'));
+      if (d.sameName && d.sameName.length) todo.push('名冊同名不只一位，系統無法判斷是哪一位（請到「員工」填正確員編）：' + d.sameName.join('、'));
       if (d.noSiteDepts.length) todo.push('NUEIP 案場還沒有工地座標（到「工地」新增，名稱相同即可）：' + d.noSiteDepts.join('、'));
       $('tTodo').style.display = todo.length ? '' : 'none'; $('tTodoBody').innerHTML = ''; todo.forEach(function (t) { $('tTodoBody').appendChild(el('p', t)); });
     }).catch(err('tMsg'));
@@ -429,6 +448,8 @@
       [['名冊人數', STAFF.length], ['已綁定打卡', bound], ['尚未綁定', STAFF.length - bound]].forEach(function (x) { var dv = el('div', x[0]); dv.prepend(el('b', String(x[1]))); st.appendChild(dv); });
       $('stMsg').textContent = d.synced ? '最後同步 ' + d.synced : '';
       var um = $('stUnmatched'); um.innerHTML = ''; $('stUnWrap').style.display = d.unmatched.length ? '' : 'none';
+      $('stUnWrap').style.display = (d.unmatched.length || (d.dupNo || []).length) ? '' : 'none';
+      (d.dupNo || []).forEach(function (x) { var tr = el('tr'); td(tr, x.names); td(tr, el('span', '員編重複 ' + x.no, 'tag t-missing')); td(tr, ''); um.appendChild(tr); });
       d.unmatched.forEach(function (e) { var tr = el('tr'); td(tr, e.name); td(tr, e.emp_no || '—'); td(tr, e.bound_at ? e.bound_at.slice(0, 10) : ''); um.appendChild(tr); });
       staffRows();
     });
