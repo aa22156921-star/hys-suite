@@ -161,7 +161,7 @@ function deviceToken(req) {
 }
 async function currentEmployee(req, env) {
   const t = deviceToken(req); if (!t) return null;
-  return env.DB.prepare('SELECT e.id, e.name, e.site_id, e.active, e.auto_ping, e.locate_req, e.roam, e.nueip_uid, e.nueip_dept FROM devices d JOIN employees e ON e.id = d.emp_id WHERE d.device_hash = ?').bind(await sha256(t)).first();
+  return env.DB.prepare('SELECT e.id, e.name, e.site_id, e.active, e.auto_ping, e.locate_req, e.roam, e.nueip_uid, e.nueip_dept, e.emp_no FROM devices d JOIN employees e ON e.id = d.emp_id WHERE d.device_hash = ?').bind(await sha256(t)).first();
 }
 const cookieHeader = (t) => `${COOKIE}=${t}; Path=/; Max-Age=315360000; HttpOnly; Secure; SameSite=Lax`;
 
@@ -298,7 +298,15 @@ async function apiMe(req, env) {
     const last = await env.DB.prepare('SELECT MAX(ms) AS ms FROM pings WHERE emp_id = ?').bind(emp.id).first();
     locate = !(last && last.ms >= emp.locate_req);
   }
-  return json({ bound: true, name: emp.name, now, windowMin: WINDOW_MIN, upcoming, checks: autoChecks(emp.auto_ping, now), poll, locate });
+  // 還沒對上人事名冊的：名冊裡同名只有一位就自動補上員編
+  if (!emp.nueip_uid) {
+    const r = (await env.DB.prepare('SELECT uid, emp_no, dept_id FROM staff WHERE name = ? AND active = 1').bind(emp.name).all()).results;
+    if (r.length === 1) {
+      await env.DB.prepare('UPDATE employees SET nueip_uid = ?, emp_no = COALESCE(emp_no, ?), nueip_dept = COALESCE(nueip_dept, ?) WHERE id = ?').bind(r[0].uid, r[0].emp_no, r[0].dept_id, emp.id).run();
+      emp.emp_no = emp.emp_no || r[0].emp_no;
+    }
+  }
+  return json({ bound: true, name: emp.name, empNo: emp.emp_no || '', now, windowMin: WINDOW_MIN, upcoming, checks: autoChecks(emp.auto_ping, now), poll, locate });
 }
 
 // 把名冊的員編／NUEIP 帳號補進已建立、但還沒對上的員工（姓名在名冊裡唯一才自動對）
