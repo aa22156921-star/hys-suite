@@ -134,7 +134,7 @@
       <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待處理員編（沒有員編、對不到名冊、或員編重複）</h2>
         <p class="muted" style="margin:0 0 8px">請到人易新增或確認此人的員工編號，再到「員工」分頁填上員編，系統就會自動對上。</p>
         <div class="scroll"><table><thead><tr><th>姓名</th><th>目前員編</th><th>綁定日</th></tr></thead><tbody id="stUnmatched"></tbody></table></div></div>
-      <div class="card" id="stHrWrap" style="display:none;border-color:#0f766e"><h2 style="margin-top:0">已建檔、人易尚無（請到人易新增）</h2>
+      <div class="card" id="stHrWrap" style="display:none;border-color:#0f766e"><h2 style="margin-top:0">已建檔、人易尚無（請到人易新增）</h2><div class="row" style="margin:0 0 8px"><button id="stToNueip" class="primary">匯出人易新增員工檔（Excel）</button><span class="muted" id="stToMsg"></span></div>
         <p class="muted" style="margin:0 0 8px">人事建檔裡有、但人易名冊還沒有的人，多半是新進人員。到人易新增後，隔天早上同步就會自動對上。</p>
         <div class="scroll"><table><thead><tr><th>姓名</th><th>派駐社區</th><th>職位</th><th>到職日</th><th>建檔狀態</th><th>建檔日</th></tr></thead><tbody id="stHrOnly"></tbody></table></div></div>
       <div class="card"><div class="scroll"><table><thead><tr><th>員編</th><th>姓名</th><th>部門／案場</th><th>職稱</th><th>到職日</th><th>打卡綁定</th><th>人事建檔</th></tr></thead><tbody id="stRows"></tbody></table></div></div>
@@ -478,7 +478,7 @@
   loaders.staff = function () {
     api('/staff').then(function (d) {
       STAFF = d.staff; HRON = !!d.hrOn;
-      var hw = $('stHrWrap'), hb = $('stHrOnly'); hb.innerHTML = ''; hw.style.display = (d.hrOnly || []).length ? '' : 'none';
+      var hw = $('stHrWrap'), hb = $('stHrOnly'); hb.innerHTML = ''; hw.style.display = ((d.hrOnly || []).length || (d.unmatched || []).length) ? '' : 'none';
       (d.hrOnly || []).forEach(function (h) { var tr = el('tr'); td(tr, h.name); td(tr, h.dept_name || ''); td(tr, h.title || ''); td(tr, h.hire_date || ''); td(tr, el('span', HRST[h.status] || h.status, 'tag t-late')); td(tr, h.created); hb.appendChild(tr); });
       var bound = STAFF.filter(function (r) { return r.devices > 0; }).length;
       var st = $('stStats'); st.innerHTML = '';
@@ -495,6 +495,18 @@
   var HR_URL = /^hys\./.test(location.hostname) ? '/hr/' : 'https://hr-scan.aa22156921.workers.dev/';
   loaders.hr = function () { $('hrOpen').href = HR_URL; if (!$('hrFrame').src) $('hrFrame').src = HR_URL; };
   $('stQ').oninput = staffRows;
+  $('stToNueip').onclick = function () {
+    $('stToMsg').textContent = '產生中…';
+    Promise.all([api('/staff/to-nueip?log=1'), loadXLSX()]).then(function (res) {
+      var d = res[0];
+      if (!d.rows.length) { $('stToMsg').textContent = '目前沒有要新增到人易的人 ✓'; return; }
+      var head = Object.keys(d.rows[0]), rows = [head].concat(d.rows.map(function (r) { return head.map(function (k) { return r[k]; }); }));
+      var ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = head.map(function (k) { return { wch: Math.max(8, k.length * 2 + 4) }; });
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '人易新增員工');
+      XLSX.writeFile(wb, '人易新增員工_' + d.at + '.xlsx');
+      $('stToMsg').textContent = '已匯出 ' + d.rows.length + ' 人（含身分證等個資，已記入操作紀錄；匯入人易後隔天同步會自動對上並標「已匯入」）';
+    }).catch(function (e) { $('stToMsg').textContent = '匯出失敗：' + e.message; });
+  };
   $('stMerge').onclick = function () { api('/staff/merge', {}).then(function (d) { $('stMsg').textContent = '補上 ' + d.merged + ' 位員工的員編'; loaders.staff(); }); };
   $('stCsv').onclick = function () {
     $('stMsg').textContent = '匯出中…';

@@ -767,6 +767,13 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
             (SELECT COUNT(*) FROM files f WHERE f.employee_id = e.id) AS files FROM employees e ORDER BY e.id DESC`).all()).results;
         const byName = {}; for (const h of hr) if (!byName[h.name]) byName[h.name] = h;
         const names = new Set(results.map((r) => r.name));
+        // 人易名冊已出現的人，人事建檔自動改成「已匯入 NUEIP」（閉環：後台新增 → 匯入人易 → 隔天同步對上）
+        const done = hr.filter((h) => h.status !== 'imported' && names.has(h.name)).map((h) => h.id);
+        if (done.length) {
+          await env.HR.prepare(`UPDATE employees SET status = 'imported', updated_by = '洪英系統', updated_at = ? WHERE id IN (SELECT value FROM json_each(?))`).bind(new Date().toISOString(), JSON.stringify(done)).run();
+          for (const h of hr) if (done.includes(h.id)) h.status = 'imported';
+          await audit(env, '系統', '人事建檔標記已入人易', done.length + ' 筆');
+        }
         for (const r of results) { const h = byName[r.name]; if (h) r.hr = { status: h.status, files: h.files }; }
         hrOnly = hr.filter((h) => !names.has(h.name)).map((h) => ({ name: h.name, status: h.status, dept_name: h.dept_name, title: h.title, hire_date: h.hire_date, created: (h.created_at || '').slice(0, 10), files: h.files }));
         hrOn = true;
@@ -775,6 +782,35 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     return json({ staff: results, unmatched, dupNo, hrOn, hrOnly, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
   }
   if (p === '/staff/merge' && M === 'POST') return json({ ok: true, merged: await mergeRoster(DB) });
+  // 後台有、人易還沒有的人 → 產生人易「新增員工」匯入檔（人事建檔的完整資料＋後台自建帳號）；每次匯出都留紀錄
+  if (p === '/staff/to-nueip' && M === 'GET') {
+    const names = new Set((await DB.prepare('SELECT name FROM staff WHERE active = 1').all()).results.map((r) => r.name));
+    const rows = [], seen = new Set();
+    const G = { M: '男', F: '女', male: '男', female: '女' };
+    if (env.HR) {
+      try {
+        const hr = (await env.HR.prepare(`SELECT e.*, d.code AS dept_code FROM employees e LEFT JOIN departments d ON d.id = e.dept_id WHERE e.status <> 'imported' ORDER BY e.id`).all()).results;
+        for (const h of hr) {
+          if (names.has(h.name) || seen.has(h.name)) continue; seen.add(h.name);
+          rows.push({ '來源': '人事建檔', '員工編號': '', '姓名': h.name, '性別': G[h.gender] || h.gender || '', '身分證字號': h.id_no || '', '出生日期': h.birth_date || '', '到職日': h.hire_date || '',
+            '部門': h.dept_name || '', '部門代號': h.dept_code || '', '職稱': h.title || '', '手機': h.mobile || '', '市話': h.phone || '', 'Email': h.email || '',
+            '戶籍地址': h.address_reg || '', '通訊地址': h.address_mail || '', '緊急聯絡人': h.emergency_name || '', '緊急聯絡人關係': h.emergency_relation || '', '緊急聯絡人電話': h.emergency_phone || '',
+            '建檔狀態': { pending: '待核對', confirmed: '已確認' }[h.status] || h.status, '備註': h.note || '' });
+        }
+      } catch (e) { /* 人事建檔未連線 */ }
+    }
+    const own = (await DB.prepare(`SELECT e.name, e.emp_no, e.created_at, s.name AS site FROM employees e LEFT JOIN sites s ON s.id = e.site_id
+      WHERE e.active = 1 AND e.nueip_uid IS NULL AND e.viewer = 0 ORDER BY e.id`).all()).results;
+    for (const e of own) {
+      const nm = e.name.replace(/\(.*\)$/, '');
+      if (names.has(nm) || seen.has(nm)) continue; seen.add(nm);
+      rows.push({ '來源': '洪英系統後台', '員工編號': e.emp_no || '', '姓名': nm, '性別': '', '身分證字號': '', '出生日期': '', '到職日': (e.created_at || '').slice(0, 10),
+        '部門': e.site || '', '部門代號': '', '職稱': '', '手機': '', '市話': '', 'Email': '', '戶籍地址': '', '通訊地址': '', '緊急聯絡人': '', '緊急聯絡人關係': '', '緊急聯絡人電話': '',
+        '建檔狀態': '只有後台帳號（請先到人事建檔補資料）', '備註': '' });
+    }
+    if (url.searchParams.get('log') === '1') await audit(env, '管理員', '匯出人易新增員工檔', rows.length + ' 人：' + rows.map((r) => r['姓名']).join('、').slice(0, 300));
+    return json({ rows, at: twDate(Date.now()), hrOn: !!env.HR });
+  }
   // 人員清冊完整匯出：名冊全部欄位＋本系統的帳號、綁定、追蹤、排班、最近定位；每次匯出都寫進操作紀錄
   if (p === '/staff/export' && M === 'GET') {
     const today = twDate(Date.now()), mFrom = today.slice(0, 7) + '-01', mTo = today.slice(0, 7) + '-31';
