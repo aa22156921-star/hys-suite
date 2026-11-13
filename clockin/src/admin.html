@@ -128,7 +128,7 @@
     <!-- 操作紀錄 -->
     <section class="sec" id="s-staff">
       <div class="card"><div class="row"><input id="stQ" placeholder="搜尋姓名、員編、案場、職稱" style="min-width:220px"><button class="primary" id="stLoad">重新整理</button>
-        <button id="stMerge">名冊對應員工</button><button id="stCsv">匯出 Excel</button><span class="muted" id="stMsg"></span></div>
+        <button id="stMerge">名冊對應員工</button><button id="stCsv" title="名冊全部欄位＋帳號、綁定、追蹤、排班、最近定位">匯出完整清冊（Excel）</button><span class="muted" id="stMsg"></span></div>
         <p class="muted" style="margin:8px 0 0">每天早上從 NUEIP 複製一份（員編、姓名、部門、職稱、到職日），只讀不改 NUEIP。員工打開打卡只要輸入姓名；名冊裡同名只有一位就自動帶入員編，對不到的會列在下面「待補員編」。</p>
         <div class="stats" id="stStats" style="margin-top:10px"></div></div>
       <div class="card" id="stUnWrap" style="display:none;border-color:#f59e0b"><h2 style="margin-top:0">待處理員編（沒有員編、對不到名冊、或員編重複）</h2>
@@ -497,9 +497,16 @@
   $('stQ').oninput = staffRows;
   $('stMerge').onclick = function () { api('/staff/merge', {}).then(function (d) { $('stMsg').textContent = '補上 ' + d.merged + ' 位員工的員編'; loaders.staff(); }); };
   $('stCsv').onclick = function () {
-    var rows = [['員編', '姓名', '部門／案場', '職稱', '到職日', '打卡綁定']].concat(STAFF.map(function (r) { return [r.emp_no, r.name, r.dept_name || '', r.title || '', r.arrive || '', r.devices > 0 ? '已綁定' : '未綁定']; }));
-    var csv = '\ufeff' + rows.map(function (r) { return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
-    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = '人事名冊.csv'; a.click();
+    $('stMsg').textContent = '匯出中…';
+    Promise.all([api('/staff/export'), loadXLSX()]).then(function (res) {
+      var d = res[0], head = d.rows.length ? Object.keys(d.rows[0]) : ['員編', '姓名'];
+      var rows = [head].concat(d.rows.map(function (r) { return head.map(function (k) { return r[k]; }); }));
+      var ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = head.map(function (k) { return { wch: Math.max(6, k.length * 2 + 2) }; });
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: head.length - 1 } }) };
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '人員清冊');
+      XLSX.writeFile(wb, '洪英人員清冊_' + d.at + '.xlsx');
+      $('stMsg').textContent = '已匯出 ' + d.rows.length + ' 人、' + head.length + ' 欄（已記入操作紀錄）';
+    }).catch(function (e) { $('stMsg').textContent = '匯出失敗：' + e.message; });
   };
 
   // ---------- 出勤報表 ----------

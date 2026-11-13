@@ -73,6 +73,9 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE employees ADD COLUMN viewer INTEGER NOT NULL DEFAULT 0').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE requests ADD COLUMN place_lat REAL').run(); } catch (e) { /* 已存在 */ }
   try { await env.DB.prepare('ALTER TABLE requests ADD COLUMN place_lng REAL').run(); } catch (e) { /* 已存在 */ }
+  // 人事名冊延伸欄位（每天由排程從 NUEIP「員工組成」資料集同步；只在後台顯示、匯出會留紀錄）
+  for (const c of ['gender TEXT', 'age INTEGER', 'work_type TEXT', 'country TEXT', 'military TEXT', 'marriage TEXT', 'identity TEXT', 'email TEXT', 'status TEXT'])
+    try { await env.DB.prepare('ALTER TABLE staff ADD COLUMN ' + c).run(); } catch (e) { /* 已存在 */ }
   schemaReady = true;
 }
 
@@ -772,6 +775,33 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
     return json({ staff: results, unmatched, dupNo, hrOn, hrOnly, synced: synced ? twDate(synced) + ' ' + twClock(synced) : null });
   }
   if (p === '/staff/merge' && M === 'POST') return json({ ok: true, merged: await mergeRoster(DB) });
+  // 人員清冊完整匯出：名冊全部欄位＋本系統的帳號、綁定、追蹤、排班、最近定位；每次匯出都寫進操作紀錄
+  if (p === '/staff/export' && M === 'GET') {
+    const today = twDate(Date.now()), mFrom = today.slice(0, 7) + '-01', mTo = today.slice(0, 7) + '-31';
+    const { results } = await DB.prepare(`SELECT s.emp_no, s.name, s.dept_name, s.title, s.arrive, s.status, s.gender, s.age, s.work_type, s.country, s.military, s.marriage, s.identity, s.email,
+        e.id AS emp_id, e.name AS sys_name, e.active AS sys_active, e.bound_at, e.consent_at, e.auto_ping, e.roam, e.viewer, e.created_at,
+        (SELECT name FROM sites WHERE id = e.site_id) AS home_site,
+        (SELECT COUNT(*) FROM devices WHERE emp_id = e.id) AS devices,
+        (SELECT h.shift_code || '｜' || COALESCE(t.name, '') FROM schedule h LEFT JOIN sites t ON t.id = h.site_id WHERE h.emp_id = e.id AND h.date = ?1) AS today_shift,
+        (SELECT COUNT(*) FROM schedule WHERE emp_id = e.id AND date BETWEEN ?2 AND ?3) AS month_days,
+        (SELECT shift_code FROM schedule WHERE emp_id = e.id AND date BETWEEN ?2 AND ?3 GROUP BY shift_code ORDER BY COUNT(*) DESC LIMIT 1) AS main_shift,
+        (SELECT t.name FROM schedule h JOIN sites t ON t.id = h.site_id WHERE h.emp_id = e.id AND h.date BETWEEN ?2 AND ?3 GROUP BY h.site_id ORDER BY COUNT(*) DESC LIMIT 1) AS main_site,
+        (SELECT MAX(ms) FROM pings WHERE emp_id = e.id AND err IS NULL) AS last_ms,
+        (SELECT COUNT(*) FROM requests WHERE emp_id = e.id AND date BETWEEN ?2 AND ?3) AS month_req
+      FROM staff s LEFT JOIN employees e ON e.nueip_uid = s.uid WHERE s.active = 1 ORDER BY s.dept_name, s.emp_no`).bind(today, mFrom, mTo).all();
+    const days = (d) => { if (!d) return ''; const t = Date.parse(d.slice(0, 10)); return isNaN(t) ? '' : Math.floor((Date.parse(today) - t) / 864e5); };
+    const ping = (v) => v === '不追蹤' ? '不追蹤' : v === '班表' ? '依班表' : v ? '定時 ' + v : '';
+    const rows = results.map((r) => ({
+      '員編': r.emp_no, '姓名': r.name, '部門／案場': r.dept_name || '', '職稱': r.title || '', '到職日': r.arrive || '', '年資（天）': days(r.arrive), '在職狀態': r.status || '在職',
+      '性別': r.gender || '', '年齡': r.age == null ? '' : r.age, '工作型態': r.work_type || '', '國籍': r.country || '', '兵役': r.military || '', '婚姻': r.marriage || '', '身分': r.identity || '', 'Email': r.email || '',
+      '系統帳號': r.emp_id ? (r.sys_active ? '已建立' : '已停用') : '未建立', '系統顯示名稱': r.sys_name || '', '綁定裝置數': r.devices || 0, '綁定時間': (r.bound_at || '').slice(0, 10),
+      '同意定位': (r.consent_at || '').slice(0, 10), '預設案場': r.home_site || '', '外勤': r.roam ? '是' : '', '考勤查核帳號': r.viewer ? '是' : '', '位置追蹤': ping(r.auto_ping),
+      '今日班別': r.today_shift || '', '本月排班天數': r.month_days || 0, '本月主要班別': r.main_shift || '', '本月主要案場': r.main_site || '',
+      '最近打卡／定位': r.last_ms ? twDate(r.last_ms) + ' ' + twClock(r.last_ms) : '', '本月申請件數': r.month_req || 0,
+    }));
+    await audit(env, '管理員', '匯出人員清冊', rows.length + ' 人，' + Object.keys(rows[0] || {}).length + ' 欄');
+    return json({ rows, at: today });
+  }
   if (p === '/audit' && M === 'GET') {
     const { results } = await DB.prepare('SELECT ms, actor, action, detail FROM audit ORDER BY id DESC LIMIT 500').all();
     return json({ audit: results.map((a) => ({ ...a, when: twDate(a.ms) + ' ' + twClock(a.ms) })) });
