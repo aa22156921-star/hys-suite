@@ -532,6 +532,7 @@
   function posCell(p) {
     if (!p) return '';
     var w = el('span');
+    if (p.manual) { w.appendChild(el('span', p.fixNote || p.at, 'tag t-pending')); return w; }
     w.appendChild(document.createTextNode((p.at || '無對應上班地點') + ' '));
     w.appendChild(mapLink(p.lat, p.lng, p.dist != null ? p.dist + ' m' : '地圖'));
     if (p.inRange === false) { w.appendChild(document.createTextNode(' ')); w.appendChild(el('span', '範圍外', 'tag t-far')); }
@@ -569,13 +570,13 @@
   $('rLoad').onclick = loaders.report;
   $('rCsv').onclick = function () {
     var L = function (s, p) { return ST[s][0] + (s === 'late' && p ? p.lateMin + '分' : ''); };
-    var head = ['日期', '姓名', '班別', '上班', '下班', '班表工地', '上班狀態', '上班時間', '上班定位地點', '上班距離(m)', '上班範圍', '下班狀態', '下班時間', '下班定位地點', '下班距離(m)', '下班範圍', '上班座標', '下班座標'];
+    var head = ['日期', '姓名', '班別', '上班', '下班', '班表工地', '上班狀態', '上班時間', '上班定位地點', '上班距離(m)', '上班範圍', '下班狀態', '下班時間', '下班定位地點', '下班距離(m)', '下班範圍', '上班座標', '下班座標', '上班補卡紀錄', '下班補卡紀錄'];
     var lines = [head].concat(lastReport.map(function (r) {
       var i = r.in || {}, o = r.out || {};
       var AT = function (x) { return x.time ? (x.at || '無對應上班地點') : ''; };
       return [r.date, r.name, r.shift, r.start, r.end, r.site, L(r.inStatus, r.in), i.time || '', AT(i), i.dist != null ? i.dist : '', i.inRange == null ? '' : (i.inRange ? '內' : '外'),
               L(r.outStatus, r.out), o.time || '', AT(o), o.dist != null ? o.dist : '', o.inRange == null ? '' : (o.inRange ? '內' : '外'),
-              i.lat ? i.lat + ',' + i.lng : '', o.lat ? o.lat + ',' + o.lng : ''];
+              i.lat ? i.lat + ',' + i.lng : '', o.lat ? o.lat + ',' + o.lng : '', i.fixNote || '', o.fixNote || ''];
     })).map(function (row) { return row.map(function (v) { v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }).join(','); });
     var a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
     a.download = '出勤_' + $('rFrom').value + '_' + $('rTo').value + '.csv'; a.click();
@@ -595,11 +596,11 @@
       if ((r.in && r.in.inRange === false) || (r.out && r.out.inRange === false)) bad.push('不在案場範圍');
       return bad.length ? bad.join('、') : '符合';
     };
-    var rows = [['日期', '員工編號', '姓名', '案場', '班別', '表定上班', '表定下班', '上班打卡', '下班打卡', '是否符合到班', '上班定位地點', '下班定位地點']];
+    var rows = [['日期', '員工編號', '姓名', '案場', '班別', '表定上班', '表定下班', '上班打卡', '下班打卡', '是否符合到班', '上班定位地點', '下班定位地點', '上班補卡紀錄', '下班補卡紀錄']];
     lastReport.forEach(function (r) {
       var i = r.in || {}, o = r.out || {};
       rows.push([r.date.replace(/-/g, '/'), r.empNo || '', r.name, r.site, r.shift, r.start, r.end, i.time || '', o.time || '', JUDGE(r),
-                 i.time ? (i.at || '無對應上班地點') : '', o.time ? (o.at || '無對應上班地點') : '']);
+                 i.time ? (i.at || '無對應上班地點') : '', o.time ? (o.at || '無對應上班地點') : '', i.fixNote || '', o.fixNote || '']);
     });
     loadXLSX().then(function () {
       var ws = XLSX.utils.aoa_to_sheet(rows);

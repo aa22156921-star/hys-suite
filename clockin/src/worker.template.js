@@ -89,6 +89,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function twDate(ms) { return new Date(ms + TZ_OFFSET).toISOString().slice(0, 10); }
 function twClock(ms) { return new Date(ms + TZ_OFFSET).toISOString().slice(11, 16); }
+function twStamp(ms) { return ms ? new Date(ms + TZ_OFFSET).toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/') : ''; } // 補卡申請／核准的實際時間（到秒）
 function twMs(date, hhmm) { const [y, m, d] = date.split('-').map(Number); const [h, mi] = hhmm.split(':').map(Number); return Date.UTC(y, m - 1, d, h, mi) - TZ_OFFSET; }
 function addDays(date, n) { const [y, m, d] = date.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }
 function distanceM(a, b, c, d) { const R = 6371000, r = Math.PI / 180, x = Math.sin((c - a) * r / 2), y = Math.sin((d - b) * r / 2);
@@ -249,7 +250,7 @@ async function decorate(env, rows) {
     const m = r.lat != null ? matchSite(sites, r.lat, r.lng) : null;
     out.push({ ...r, text: reqText(r), kindName: KIND_NAME[r.kind], statusName: STATUS_NAME[r.status], at: m && m.at ? m.at.name : null,
       check: r.kind === 'out' ? await outCheck(env, sites, r) : null,
-      created: twDate(r.created_ms) + ' ' + twClock(r.created_ms), decided: r.decided_ms ? twDate(r.decided_ms) + ' ' + twClock(r.decided_ms) : null });
+      created: twStamp(r.created_ms), decided: r.decided_ms ? twStamp(r.decided_ms) : null });
   }
   return out;
 }
@@ -608,9 +609,9 @@ async function buildReport(env, from, to) {
   const byEmp = {};
   for (const p of pings) (byEmp[p.emp_id] ||= []).push(p);
   // 主管核准的補卡 → 當作一筆打卡（標記為補卡）
-  const { results: fixes } = await env.DB.prepare(`SELECT emp_id, date, io, time, decided_by FROM requests WHERE kind = 'punch' AND status = 'approved' AND date BETWEEN ? AND ?`)
+  const { results: fixes } = await env.DB.prepare(`SELECT emp_id, date, io, time, decided_by, created_ms, decided_ms FROM requests WHERE kind = 'punch' AND status = 'approved' AND date BETWEEN ? AND ?`)
     .bind(addDays(from, -1), to).all();
-  for (const f of fixes) (byEmp[f.emp_id] ||= []).push({ emp_id: f.emp_id, ms: 0, manual: true, io: f.io, date: f.date, time: f.time, by: f.decided_by });
+  for (const f of fixes) (byEmp[f.emp_id] ||= []).push({ emp_id: f.emp_id, ms: 0, manual: true, io: f.io, date: f.date, time: f.time, by: f.decided_by, asked: f.created_ms, okAt: f.decided_ms });
   // 核准的請假
   const { results: leaves } = await env.DB.prepare(`SELECT emp_id, date, date_to, time, time_to, leave_type FROM requests WHERE kind = 'leave' AND status = 'approved' AND date <= ? AND date_to >= ?`)
     .bind(to, from).all();
@@ -627,7 +628,7 @@ async function buildReport(env, from, to) {
     const leave = leaves.find((l) => l.emp_id === r.emp_id && l.date <= r.date && l.date_to >= r.date);
     const pack = (p) => {
       if (!p) return null;
-      if (p.manual) return { time: p.time, ms: p.ms, lat: null, lng: null, acc: null, dist: null, inRange: true, at: '補卡（' + (p.by || '主管') + '核准）', manual: true };
+      if (p.manual) return { time: p.time, ms: p.ms, lat: null, lng: null, acc: null, dist: null, inRange: true, at: '補卡（' + (p.by || '主管') + '核准）', manual: true, fixNote: '補卡｜申請 ' + twStamp(p.asked) + '｜核准 ' + twStamp(p.okAt) + '｜核准人 ' + (p.by || '主管') };
       const m = matchSite(sites, p.lat, p.lng);
       const dist = site ? Math.round(distanceM(site.lat, site.lng, p.lat, p.lng)) : (m.at ? m.at.dist : null);
       return { time: twClock(p.ms), ms: p.ms, lat: p.lat, lng: p.lng, acc: p.acc != null ? Math.round(p.acc) : null,
@@ -1073,7 +1074,8 @@ async function adminRoutes(req, env, url, p, M, DB, b) {
         if (!r.empNo) { skipped.push(r.name + '（沒有員工編號）'); continue; }
         if (!all && !pk.inRange) { skipped.push(r.name + ' ' + io[k] + '（不在案場範圍）'); continue; }
         lines.push(fmt.replace(/\{no\}/g, r.empNo).replace(/\{name\}/g, r.name).replace(/\{date\}/g, fd(pk.ms)).replace(/\{time\}/g, ft(pk.ms))
-          .replace(/\{sec\}/g, new Date(pk.ms + TZ_OFFSET).toISOString().slice(11, 19)).replace(/\{io\}/g, io[k]).replace(/\{site\}/g, r.roam ? (pk.at || '外勤') : r.site));
+          .replace(/\{sec\}/g, new Date(pk.ms + TZ_OFFSET).toISOString().slice(11, 19)).replace(/\{io\}/g, io[k]).replace(/\{site\}/g, r.roam ? (pk.at || '外勤') : r.site)
+          .replace(/\{kind\}/g, pk.manual ? '補卡' : '打卡').replace(/\{note\}/g, pk.fixNote || ''));
       }
     }
     return new Response(lines.join(nl) + (lines.length ? nl : ''), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store',
