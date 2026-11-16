@@ -15,7 +15,8 @@ h1{margin:0 0 4px;font-size:20px}
 .tab{border:1px solid #e2e2de;background:#fff;border-radius:999px;padding:6px 14px;min-height:38px;font:inherit;cursor:pointer;color:#1a1a1a}
 .tab[aria-pressed=true]{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 .search{flex:1 1 200px;padding:10px 12px;border:1px solid #e2e2de;border-radius:8px;background:#fff;font:inherit}
-main{padding:14px 16px 80px;display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:20px;align-items:start}
+main{padding:14px 16px 80px;display:grid;grid-template-columns:430px minmax(0,1fr);gap:20px;align-items:start}
+@media(min-width:1151px){.listwrap{order:1}.left{order:2}}
 .left{min-width:0}
 @media(max-width:1150px){main{grid-template-columns:minmax(0,1fr)}}
 h2{font-size:17px;margin:4px 0 12px}
@@ -95,7 +96,7 @@ h3{font-size:15px;color:#5f5f5f;margin:20px 0 8px;font-weight:600}
 .lv.fs4 .card{padding:2px 3px;gap:0;border-radius:5px}.lv.fs4 .t{font-size:10px;line-height:1.15}.lv.fs4 .sz{font-size:9px;padding:0 3px;margin-left:2px}.lv.fs4 .unit{font-size:9px}.lv.fs4 .qv{font-size:12px}.lv.fs4 .note{display:none}.lv.fs4 input.amt{height:18px;font-size:10px;min-width:30px}.lv.fs4 .pm button{height:9px;width:18px;font-size:9px}.lv.fs4 .slot{gap:2px}.lv.fs4{gap:2px;padding:3px}
 .wh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}.wh h2{margin:0}
 body.nocab #cabArea{display:none}
-@media(min-width:1151px){body.nocab main{grid-template-columns:minmax(0,1fr) minmax(0,820px)}body.nocab .left{order:2}body.nocab .listwrap{order:1;position:static;max-height:none}}
+@media(min-width:1151px){body.nocab main{grid-template-columns:minmax(0,820px) minmax(0,1fr)}body.nocab .listwrap{position:static;max-height:none}}
 </style>
 </head>
 <body>
