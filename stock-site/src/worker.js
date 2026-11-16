@@ -40,6 +40,18 @@ export default {
       return J({ n: r.qty });
     }
 
+    if (p === '/api/set' && req.method === 'POST') {
+      let b; try { b = await req.json(); } catch { return J({ error: '格式錯誤' }, 400); }
+      const id = String(b.id || ''), n = Number(b.n), who = String(b.who || '').slice(0, 30);
+      if (!/^w\d-\d+-\d+-\d+-\d+$/.test(id) || !Number.isInteger(n) || n < 0 || n > 99999) return J({ error: '參數錯誤' }, 400);
+      const cur = await env.DB.prepare('SELECT qty FROM items WHERE id = ?1').bind(id).first();
+      if (!cur) return J({ error: '找不到這個品項' }, 404);
+      const now = new Date().toISOString();
+      await env.DB.prepare('UPDATE items SET qty = ?1, updated_at = ?2 WHERE id = ?3').bind(n, now, id).run();
+      if (n !== cur.qty) await env.DB.prepare('INSERT INTO log (ts, item_id, d, n, who) VALUES (?1, ?2, ?3, ?4, ?5)').bind(now, id, n - cur.qty, n, who).run();
+      return J({ n });
+    }
+
     return J({ error: '找不到' }, 404);
   },
 };
