@@ -1,0 +1,8 @@
+# 制服倉庫庫存管理（獨立小網站，只有一個靜態頁）
+# Cloudflare 匯入 Git 時，根目錄填 stock-site
+name = "uniform-stock"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
