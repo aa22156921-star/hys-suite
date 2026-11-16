@@ -63,7 +63,7 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
   </details>
   <details>
     <summary>匯出</summary>
-    <p class="note">所有人看到的是同一份數量。修改請到管理版（網址後面加 /edit，需要通行碼）。</p>
+    <p class="note">所有人看到的是同一份數量。修改請到管理版（網址後面加 /edit）。</p>
     <div class="tools"><button type="button" class="tab" id="expCsv">匯出 Excel (CSV)</button></div>
   </details>
 </main>
@@ -151,7 +151,7 @@ $("#codeForm").addEventListener("submit",async e=>{e.preventDefault();ls.set("st
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();}
 $("#expCsv").onclick=()=>{const rows=[["櫃面","區","品名","尺寸","數量","單位","備註"],...Object.values(ITEMS).map(it=>[it.wall,it.sec,it.name,it.size,qty[it.id]||0,it.unit,it.note])];dl("制服庫存_"+new Date().toISOString().slice(0,10)+".csv","﻿"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n"),"text/csv");};
 if(!EDIT){document.title="制服倉庫存量（查看）";$("#who").parentElement.querySelector('label[for=who]').remove();$("#who").remove();$("#modeTag").textContent="查看版・自動更新，不能修改";}
-else{document.title="制服倉庫存量（管理）";$("#modeTag").textContent="管理版";if(!code())askCode();}
+else{document.title="制服倉庫存量（管理）";$("#modeTag").textContent="管理版";}
 tabs();render();refresh();
 setInterval(()=>{if(document.visibilityState==="visible")refresh();},10000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh();});
