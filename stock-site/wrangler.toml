@@ -1,8 +1,15 @@
-# 制服倉庫庫存管理（獨立小網站，只有一個靜態頁）
-# Cloudflare 匯入 Git 時，根目錄填 stock-site
+# 制服倉庫庫存管理（全公司共用同一份數量）
+# Cloudflare 上的 Worker：young-sound-2e26，連 hys-suite 的 main，根目錄 stock-site
 name = "young-sound-2e26"
+main = "src/worker.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
 [assets]
 directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "uniform-stock-db"
+database_id = "05c495ba-c810-48fe-a0b1-477b1e9f1bfc"
