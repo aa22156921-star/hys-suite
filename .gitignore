@@ -5,3 +5,5 @@ dist/
 clockin/dist/
 android/**/build/
 android/.gradle/
+android/**/*.jks
+*.keystore

@@ -24,9 +24,22 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: 還原簽章金鑰（存在 GitHub Secrets，不放在 repo）
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "缺少 Secret：KEYSTORE_B64"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+
       - name: 打包
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: gradle assembleRelease --no-daemon --stacktrace
         working-directory: android
+
+      - name: 刪除還原的金鑰
+        if: always()
+        run: rm -f android/app/release.jks
 
       - name: 改檔名
         run: |

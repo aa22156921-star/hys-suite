@@ -24,9 +24,9 @@ android {
     signingConfigs {
         release {
             storeFile file('../app/release.jks')
-            storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+            storePassword System.getenv('KEYSTORE_PASSWORD')
             keyAlias 'clockin'
-            keyPassword System.getenv('KEYSTORE_PASSWORD') ?: 'clockin-release'
+            keyPassword System.getenv('KEYSTORE_PASSWORD')
         }
     }
 
