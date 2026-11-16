@@ -95,21 +95,21 @@ h3{font-size:15px;color:#5f5f5f;margin:20px 0 8px;font-weight:600}
 .lv.fs3 .card{padding:3px 4px;gap:1px;border-radius:6px}.lv.fs3 .t{font-size:11px}.lv.fs3 .sz{font-size:10px;padding:0 4px;margin-left:3px}.lv.fs3 .unit{font-size:10px}.lv.fs3 .qv{font-size:14px}.lv.fs3 .note{display:none}.lv.fs3 input.amt{height:22px;font-size:11px;min-width:34px}.lv.fs3 .pm button{height:11px;width:20px;font-size:10px}.lv.fs3 .slot{gap:3px}.lv.fs3{gap:3px}
 .lv.fs4 .card{padding:2px 3px;gap:0;border-radius:5px}.lv.fs4 .t{font-size:10px;line-height:1.15}.lv.fs4 .sz{font-size:9px;padding:0 3px;margin-left:2px}.lv.fs4 .unit{font-size:9px}.lv.fs4 .qv{font-size:12px}.lv.fs4 .note{display:none}.lv.fs4 input.amt{height:18px;font-size:10px;min-width:30px}.lv.fs4 .pm button{height:9px;width:18px;font-size:9px}.lv.fs4 .slot{gap:2px}.lv.fs4{gap:2px;padding:3px}
 .wh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}.wh h2{margin:0}
-body.nocab #cabArea{display:none}
+body.nocab #cabArea,body.nocab .wh,body.nocab #tabs{display:none}
 @media(min-width:1151px){body.nocab main{grid-template-columns:minmax(0,820px) minmax(0,1fr)}body.nocab .listwrap{position:static;max-height:none}}
 </style>
 </head>
-<body>
+<body class="nocab">
 <header>
   <h1>制服倉庫存量</h1>
   <div class="stats"><span>總數量 <b id="sQty">–</b></span><span>品項 <b id="sItems">–</b></span><span>缺貨 <b id="sZero">–</b></span><span class="st" id="status"></span></div>
-  <div class="bar" id="tabs"></div>
+  <div class="bar"><button type="button" class="tab" id="toggleCab" aria-pressed="false">顯示櫃位動態圖</button><span class="bar" id="tabs" style="margin:0"></span></div>
   <div class="bar"><label for="who" style="font-size:14px">操作人</label><input id="who" class="search" style="flex:0 1 140px" placeholder="你的名字"><label for="q" style="position:absolute;left:-9999px">搜尋</label><input id="q" class="search" type="search" placeholder="搜尋品名或尺寸，例如：保全外套 XL"></div>
 </header>
 <div id="codeBox" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.96);z-index:9;align-items:center;justify-content:center"><form id="codeForm" style="border:1px solid #000;padding:20px;background:#fff;display:flex;flex-direction:column;gap:10px;min-width:260px"><label for="codeIn"><b>請輸入通行碼</b></label><input id="codeIn" class="search" autocomplete="off"><span id="codeMsg" style="font-size:13px"></span><button class="tab" type="submit">確定</button><a href="/" style="font-size:13px;color:#000">只要查看，回查看版</a></form></div>
 <main>
 <div class="left">
-  <div class="wh"><h2 id="wallName"></h2><button type="button" class="tab" id="toggleCab" aria-pressed="false">關閉櫃位圖</button></div>
+  <div class="wh"><h2 id="wallName"></h2></div>
   <div id="cabArea">
   <div class="wall" id="wall"></div>
   </div>
@@ -270,9 +270,9 @@ $("#codeForm").addEventListener("submit",async e=>{e.preventDefault();ls.set("st
   catch(err){$("#codeMsg").textContent=err.message;askCode();}});
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();}
 $("#expCsv").onclick=()=>{const rows=[["櫃面","區","品名","尺寸","數量","單位","備註"],...Object.values(ITEMS).map(it=>[it.wall,it.sec,it.name,it.size,qty[it.id]||0,it.unit,it.note])];dl("制服庫存_"+new Date().toISOString().slice(0,10)+".csv","﻿"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n"),"text/csv");};
-function setCab(off){document.body.classList.toggle("nocab",off);const b=$("#toggleCab");b.textContent=off?"顯示櫃位圖":"關閉櫃位圖";b.setAttribute("aria-pressed",off);ls.set("stock-nocab",off?"1":"");if(!off)fit();}
+function setCab(off){document.body.classList.toggle("nocab",off);const b=$("#toggleCab");b.textContent=off?"顯示櫃位動態圖":"關閉櫃位動態圖";b.setAttribute("aria-pressed",!off);ls.set("stock-cab",off?"":"1");hh();if(!off)fit();}
 $("#toggleCab").onclick=()=>setCab(!document.body.classList.contains("nocab"));
-ITEMS=Object.assign({},BASE);tabs();hh();render();setCab(ls.get("stock-nocab")==="1");refresh();
+ITEMS=Object.assign({},BASE);tabs();hh();render();setCab(ls.get("stock-cab")!=="1");refresh();
 setInterval(()=>{if(document.visibilityState==="visible")refresh();},10000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh();});
 </script>
