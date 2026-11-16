@@ -49,11 +49,46 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
 .multi .ctl button{width:26px;height:32px;font-size:16px}
 .multi .ctl input{min-width:30px;height:32px;font-size:15px}
 .multi .t{font-size:14px}
+
+.card .ctl{flex-wrap:wrap}
+.ctl .qv{margin-right:2px}
+.pm{margin-left:0}
+.pm{display:inline-flex;flex-direction:column;gap:2px;margin-left:4px}
+.pm button{width:30px;height:20px;border:1px solid #e2e2de;border-radius:6px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:#1a1a1a;padding:0}
+.pm button:active{background:#eee}
+input.amt{flex:1 1 52px;min-width:52px;max-width:96px;width:52px;height:42px;border:1px solid #e2e2de;border-radius:8px;text-align:center;font-size:14px;padding:0 4px;-moz-appearance:textfield}
+input.amt::-webkit-inner-spin-button,.rq input::-webkit-inner-spin-button{-webkit-appearance:none}
+.multi .card{padding:6px}
+.multi .t{font-size:14px}
+.multi .qv{font-size:18px}
+.multi input.amt{min-width:44px;height:38px;font-size:12px}
+.multi .pm button{width:24px;height:18px}
+.listwrap{max-width:820px;margin:28px auto 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.chip{border:1px solid #e2e2de;background:#fff;border-radius:999px;padding:6px 12px;min-height:36px;cursor:pointer;font:inherit}
+.chip[aria-pressed=true]{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+h3{font-size:15px;color:#5f5f5f;margin:20px 0 8px;font-weight:600}
+.row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e2de;border-radius:10px;padding:10px 10px 10px 14px;margin-bottom:6px}
+.row .info{flex:1;min-width:0}
+.rn{font-weight:700;font-size:16px}
+.rq{display:flex;align-items:center;gap:4px}
+.rq button{width:44px;height:44px;border-radius:8px;border:1px solid #e2e2de;background:#fff;font-size:22px;line-height:1;cursor:pointer;color:#1a1a1a}
+.rq input{width:58px;height:44px;text-align:center;font-size:18px;font-weight:700;border:1px solid #e2e2de;border-radius:8px;-moz-appearance:textfield}
+.rq .unit{width:22px}
+.del{border:none;background:none;color:#5f5f5f;font-size:13px;cursor:pointer;padding:6px;min-height:44px}
+.del.arm{color:#b42318;font-weight:700}
+.row.zero{border-color:#f0b4ae;background:#fff7f6}
+.msg{padding:12px;color:#5f5f5f}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.form label{display:flex;flex-direction:column;font-size:13px;color:#5f5f5f;gap:4px}
+.form input,.form select{padding:9px 10px;border:1px solid #e2e2de;border-radius:8px;font:inherit;background:#fff}
+.form .full{grid-column:1/-1}
+.primary{background:#1f5fbf;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;cursor:pointer;font:inherit}
 </style>
 </head>
 <body>
 <header>
-  <h1>制服倉庫存量 <small id="modeTag" style="font-size:13px;font-weight:400"></small></h1>
+  <h1>制服倉庫存量</h1>
   <div class="stats"><span>總數量 <b id="sQty">–</b></span><span>品項 <b id="sItems">–</b></span><span>缺貨 <b id="sZero">–</b></span><span class="st" id="status"></span></div>
   <div class="bar" id="tabs"></div>
   <div class="bar"><label for="who" style="font-size:14px">操作人</label><input id="who" class="search" style="flex:0 1 140px" placeholder="你的名字"><label for="q" style="position:absolute;left:-9999px">搜尋</label><input id="q" class="search" type="search" placeholder="搜尋品名或尺寸，例如：保全外套 XL"></div>
@@ -62,13 +97,30 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
 <main>
   <h2 id="wallName"></h2>
   <div class="wall" id="wall"></div>
+  <section class="listwrap">
+    <h2>動態表</h2>
+    <div class="chips" id="lchips"></div>
+    <div id="list"></div>
+    <details id="addBox">
+      <summary>新增品項</summary>
+      <form class="form" id="addForm">
+        <label class="full">品名<input name="name" required></label>
+        <label>尺寸<input name="size" placeholder="例如 XL"></label>
+        <label>數量<input name="qty" type="number" min="0" value="1" inputmode="numeric"></label>
+        <label>單位<input name="unit" value="件"></label>
+        <label>位置<select name="loc" id="locSel"></select></label>
+        <label class="full">備註<input name="note"></label>
+        <button class="primary full" type="submit">加入</button>
+      </form>
+    </details>
+  </section>
   <details>
     <summary>最近異動</summary>
     <div class="log" id="log"></div>
   </details>
   <details>
     <summary>匯出</summary>
-    <p class="note">所有人看到的是同一份數量。修改請到管理版（網址後面加 /edit）。</p>
+    <p class="note">所有人看到的是同一份數量，每次加減都會記在「最近異動」。</p>
     <div class="tools"><button type="button" class="tab" id="expCsv">匯出 Excel (CSV)</button></div>
   </details>
 </main>
@@ -76,10 +128,11 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
 const LAYOUT=[{"id": "w1", "name": "大門進門・正面櫃牆面", "sections": [{"name": "左區", "cols": 3, "rows": [[{"span": 1, "items": [{"name": "皮帶", "size": "", "qty": 1, "unit": "條", "note": "", "id": "w1-0-0-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "POLO衫", "size": "3L", "qty": 6, "unit": "件", "note": "", "id": "w1-0-0-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "POLO衫", "size": "S", "qty": 1, "unit": "件", "note": "", "id": "w1-0-0-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "POLO衫", "size": "XL", "qty": 5, "unit": "件", "note": "", "id": "w1-0-1-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "POLO衫", "size": "L", "qty": 5, "unit": "件", "note": "", "id": "w1-0-1-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "POLO衫", "size": "2L", "qty": 5, "unit": "件", "note": "", "id": "w1-0-1-2-0"}], "label": ""}], [{"span": 3, "items": [{"name": "男保全長袖", "size": "16½", "qty": 26, "unit": "件", "note": "", "id": "w1-0-2-0-0"}], "label": ""}], [{"span": 3, "items": [{"name": "男保全長袖", "size": "16½", "qty": 24, "unit": "件", "note": "", "id": "w1-0-3-0-0"}], "label": ""}], [{"span": 3, "items": [{"name": "男保全長袖", "size": "17½", "qty": 27, "unit": "件", "note": "", "id": "w1-0-4-0-0"}], "label": ""}], [{"span": 3, "items": [], "label": ""}]]}, {"name": "中區", "cols": 3, "rows": [[{"span": 3, "items": [], "label": ""}], [{"span": 1, "items": [], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "西裝毛大衣", "size": "3L", "qty": 2, "unit": "件", "note": "", "id": "w1-1-1-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "西裝毛大衣", "size": "S", "qty": 1, "unit": "件", "note": "", "id": "w1-1-2-0-0"}], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "西裝毛大衣", "size": "9號", "qty": 3, "unit": "件", "note": "", "id": "w1-1-2-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "西裝毛大衣", "size": "2L", "qty": 3, "unit": "件", "note": "", "id": "w1-1-3-0-0"}], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "西裝毛大衣", "size": "L", "qty": 2, "unit": "件", "note": "", "id": "w1-1-3-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "男冬保全", "size": "16", "qty": 2, "unit": "件", "note": "", "id": "w1-1-4-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "男冬保全", "size": "18", "qty": 2, "unit": "件", "note": "", "id": "w1-1-4-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "男冬保全", "size": "15", "qty": 4, "unit": "件", "note": "", "id": "w1-1-4-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "西服", "size": "M", "qty": 1, "unit": "件", "note": "", "id": "w1-1-5-0-0"}, {"name": "西服", "size": "XL", "qty": 2, "unit": "件", "note": "", "id": "w1-1-5-0-1"}, {"name": "西服", "size": "2L", "qty": 2, "unit": "件", "note": "", "id": "w1-1-5-0-2"}, {"name": "西服", "size": "3L", "qty": 1, "unit": "件", "note": "", "id": "w1-1-5-0-3"}], "label": ""}, {"span": 1, "items": [{"name": "西服樣版", "size": "", "qty": 1, "unit": "件", "note": "", "id": "w1-1-5-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "幹部西服", "size": "2L", "qty": 1, "unit": "件", "note": "", "id": "w1-1-5-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "深藍雨衣套裝", "size": "XL", "qty": 2, "unit": "套", "note": "另有 3XL 褲", "id": "w1-1-6-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "螢光反光雨衣套裝", "size": "3XL", "qty": 1, "unit": "套", "note": "", "id": "w1-1-6-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "螢光雨衣套裝", "size": "XL", "qty": 1, "unit": "套", "note": "", "id": "w1-1-6-2-0"}], "label": ""}]]}, {"name": "右區", "cols": 3, "rows": [[{"span": 3, "items": [], "label": ""}], [{"span": 1, "items": [], "label": "備註"}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "特勤長褲", "size": "L", "qty": 6, "unit": "件", "note": "", "id": "w1-2-1-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "毛大衣", "size": "M", "qty": 3, "unit": "件", "note": "", "id": "w1-2-2-0-0"}], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "特勤褲", "size": "2L", "qty": 6, "unit": "件", "note": "", "id": "w1-2-2-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "西裝毛大衣", "size": "XL", "qty": 2, "unit": "件", "note": "", "id": "w1-2-3-0-0"}], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "特勤褲", "size": "XL", "qty": 12, "unit": "件", "note": "", "id": "w1-2-3-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "貝雷帽", "size": "", "qty": 16, "unit": "頂", "note": "", "id": "w1-2-4-0-0"}, {"name": "階級章", "size": "", "qty": 1, "unit": "個", "note": "", "id": "w1-2-4-0-1"}], "label": ""}, {"span": 1, "items": [{"name": "特勤褲", "size": "S", "qty": 8, "unit": "件", "note": "", "id": "w1-2-4-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "不明黑長服", "size": "XL", "qty": 1, "unit": "件", "note": "", "id": "w1-2-4-2-0"}], "label": ""}], [{"span": 3, "items": [], "label": ""}]]}]}, {"id": "w2", "name": "門簾右排・置物區櫃", "sections": [{"name": "左區", "cols": 3, "rows": [[{"span": 3, "items": [{"name": "戰術背心", "size": "", "qty": 12, "unit": "件", "note": "", "id": "w2-0-0-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "S腰帶", "size": "", "qty": 10, "unit": "條", "note": "", "id": "w2-0-1-0-0"}], "label": ""}, {"span": 1, "items": [], "label": ""}, {"span": 1, "items": [{"name": "電繡臂章", "size": "", "qty": 2, "unit": "組", "note": "每組 4 條", "id": "w2-0-1-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "女夏制服", "size": "3L", "qty": 8, "unit": "件", "note": "", "id": "w2-0-2-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "女夏制服", "size": "L", "qty": 6, "unit": "件", "note": "", "id": "w2-0-2-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "女夏制服（短）", "size": "XL", "qty": 7, "unit": "件", "note": "", "id": "w2-0-2-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "女夏制服", "size": "S", "qty": 6, "unit": "件", "note": "", "id": "w2-0-3-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "女夏制服", "size": "M", "qty": 7, "unit": "件", "note": "", "id": "w2-0-3-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "女夏制服", "size": "2XL", "qty": 11, "unit": "件", "note": "", "id": "w2-0-3-2-0"}], "label": ""}], [{"span": 3, "items": [], "label": ""}]]}, {"name": "中區", "cols": 3, "rows": [[{"span": 1, "items": [{"name": "訂做淺藍襯衫", "size": "", "qty": 2, "unit": "件", "note": "陳政豐、楊震宇", "id": "w2-1-0-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "訂做淺藍襯衫", "size": "", "qty": 3, "unit": "件", "note": "楊文盛、洪震富、高啟元", "id": "w2-1-0-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "舊訂製新淺藍襯衫", "size": "", "qty": 2, "unit": "件", "note": "陳聰盛、徐德銘", "id": "w2-1-0-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "青年裝長袖", "size": "2L", "qty": 1, "unit": "件", "note": "", "id": "w2-1-1-0-0"}, {"name": "長格紋領帶", "size": "", "qty": 1, "unit": "條", "note": "", "id": "w2-1-1-0-1"}], "label": ""}, {"span": 1, "items": [{"name": "女冬長袖制服", "size": "XL", "qty": 2, "unit": "件", "note": "", "id": "w2-1-1-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "幹部經理級領帶", "size": "", "qty": 27, "unit": "條", "note": "", "id": "w2-1-1-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "女冬長袖制服", "size": "S", "qty": 10, "unit": "件", "note": "", "id": "w2-1-2-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "女冬長袖制服", "size": "M", "qty": 1, "unit": "件", "note": "", "id": "w2-1-2-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "女冬長袖制服", "size": "4XL", "qty": 6, "unit": "件", "note": "", "id": "w2-1-2-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "女冬長袖制服", "size": "3XL", "qty": 8, "unit": "件", "note": "", "id": "w2-1-3-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "女清潔服", "size": "L", "qty": 7, "unit": "件", "note": "", "id": "w2-1-3-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "女清潔服", "size": "2XL", "qty": 6, "unit": "件", "note": "", "id": "w2-1-3-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "女清潔服", "size": "3L", "qty": 3, "unit": "件", "note": "", "id": "w2-1-4-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "女清潔服", "size": "2L", "qty": 1, "unit": "件", "note": "", "id": "w2-1-4-1-0"}, {"name": "女清潔服", "size": "XL", "qty": 1, "unit": "件", "note": "", "id": "w2-1-4-1-1"}], "label": ""}, {"span": 1, "items": [{"name": "女清潔服", "size": "XL", "qty": 5, "unit": "件", "note": "", "id": "w2-1-4-2-0"}], "label": ""}]]}, {"name": "右區", "cols": 3, "rows": [[{"span": 1, "items": [{"name": "機電員", "size": "17號", "qty": 2, "unit": "件", "note": "", "id": "w2-2-0-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "機電組長", "size": "3L", "qty": 2, "unit": "件", "note": "", "id": "w2-2-0-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "不明衣服", "size": "", "qty": 2, "unit": "件", "note": "", "id": "w2-2-0-2-0"}, {"name": "散裝背心", "size": "", "qty": 4, "unit": "件", "note": "", "id": "w2-2-0-2-1"}], "label": ""}], [{"span": 1, "items": [{"name": "機電", "size": "L", "qty": 4, "unit": "件", "note": "", "id": "w2-2-1-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "機電", "size": "XL", "qty": 6, "unit": "件", "note": "", "id": "w2-2-1-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "機電", "size": "2L", "qty": 2, "unit": "件", "note": "", "id": "w2-2-1-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "男清潔服", "size": "L", "qty": 1, "unit": "件", "note": "", "id": "w2-2-2-0-0"}, {"name": "男清潔服", "size": "XL", "qty": 1, "unit": "件", "note": "", "id": "w2-2-2-0-1"}], "label": ""}, {"span": 1, "items": [{"name": "女社區經理短裙", "size": "XL", "qty": 1, "unit": "件", "note": "", "id": "w2-2-2-1-0"}, {"name": "女社區經理短裙", "size": "L", "qty": 1, "unit": "件", "note": "", "id": "w2-2-2-1-1"}], "label": ""}, {"span": 1, "items": [{"name": "女社區經理外衣（紅）", "size": "L", "qty": 2, "unit": "件", "note": "", "id": "w2-2-2-2-0"}], "label": ""}], [{"span": 1, "items": [{"name": "工地施工背心", "size": "", "qty": 20, "unit": "件", "note": "一包 20 件", "id": "w2-2-3-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "施工工地背心", "size": "", "qty": 10, "unit": "件", "note": "一包 10 件", "id": "w2-2-3-1-0"}], "label": ""}, {"span": 1, "items": [{"name": "藍色工裝上衣", "size": "17號", "qty": 1, "unit": "件", "note": "", "id": "w2-2-3-2-0"}, {"name": "藍色工裝褲", "size": "9號", "qty": 2, "unit": "件", "note": "", "id": "w2-2-3-2-1"}], "label": ""}], [{"span": 3, "items": [], "label": ""}]]}]}, {"id": "w3", "name": "層架", "sections": [{"name": "第 1 排", "cols": 2, "rows": [[{"span": 2, "items": [{"name": "女領結", "size": "", "qty": 46, "unit": "個", "note": "", "id": "w3-0-0-0-0"}], "label": ""}], [{"span": 2, "items": [{"name": "交管背心", "size": "", "qty": 15, "unit": "件", "note": "", "id": "w3-0-1-0-0"}, {"name": "交管背心（散裝）", "size": "", "qty": 2, "unit": "件", "note": "", "id": "w3-0-1-0-1"}], "label": ""}], [{"span": 2, "items": [{"name": "保全外套", "size": "M", "qty": 5, "unit": "件", "note": "", "id": "w3-0-2-0-0"}], "label": ""}], [{"span": 2, "items": [{"name": "保全外套", "size": "M", "qty": 5, "unit": "件", "note": "", "id": "w3-0-3-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "保全外套", "size": "2XL", "qty": 1, "unit": "件", "note": "", "id": "w3-0-4-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "保全外套", "size": "3XL", "qty": 1, "unit": "件", "note": "", "id": "w3-0-4-1-0"}], "label": ""}]]}, {"name": "第 2 排", "cols": 1, "rows": [[{"span": 1, "items": [{"name": "螢光散裝雨衣", "size": "XL", "qty": 1, "unit": "件", "note": "", "id": "w3-1-0-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "螢光反光雨衣套裝", "size": "XL", "qty": 19, "unit": "套", "note": "", "id": "w3-1-1-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "保全外套", "size": "XL", "qty": 3, "unit": "件", "note": "", "id": "w3-1-2-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "保全背心", "size": "M", "qty": 2, "unit": "件", "note": "", "id": "w3-1-3-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "保全外套", "size": "L", "qty": 8, "unit": "件", "note": "", "id": "w3-1-4-0-0"}], "label": ""}]]}, {"name": "第 3 排", "cols": 3, "rows": [[{"span": 1, "items": [{"name": "青年裝", "size": "4XL", "qty": 1, "unit": "件", "note": "", "id": "w3-2-0-0-0"}], "label": ""}, {"span": 2, "items": [{"name": "青年裝", "size": "5XL", "qty": 4, "unit": "件", "note": "", "id": "w3-2-0-1-0"}], "label": ""}], [{"span": 3, "items": [{"name": "帽子", "size": "", "qty": 65, "unit": "頂", "note": "約數，分 3 格", "id": "w3-2-1-0-0"}], "label": ""}], [{"span": 3, "items": [{"name": "西裝外套", "size": "L", "qty": 5, "unit": "件", "note": "", "id": "w3-2-2-0-0"}], "label": ""}], [{"span": 3, "items": [], "label": ""}], [{"span": 3, "items": [{"name": "糾察臂章", "size": "", "qty": 30, "unit": "個", "note": "約數，未細算", "id": "w3-2-4-0-0"}], "label": ""}]]}, {"name": "第 4 排", "cols": 2, "rows": [[{"span": 2, "items": [{"name": "青年裝", "size": "4L", "qty": 3, "unit": "件", "note": "", "id": "w3-3-0-0-0"}], "label": ""}], [{"span": 1, "items": [{"name": "青年裝", "size": "2L", "qty": 1, "unit": "件", "note": "", "id": "w3-3-1-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "青年裝", "size": "3L", "qty": 8, "unit": "件", "note": "", "id": "w3-3-1-1-0"}], "label": ""}], [{"span": 1, "items": [{"name": "青年裝", "size": "L", "qty": 9, "unit": "件", "note": "", "id": "w3-3-2-0-0"}], "label": ""}, {"span": 1, "items": [{"name": "青年裝", "size": "M", "qty": 16, "unit": "件", "note": "", "id": "w3-3-2-1-0"}], "label": ""}], [{"span": 2, "items": [{"name": "青年裝", "size": "XL", "qty": 11, "unit": "件", "note": "", "id": "w3-3-3-0-0"}], "label": ""}], [{"span": 2, "items": [], "label": ""}]]}]}];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const ITEMS={};
-LAYOUT.forEach(w=>w.sections.forEach(s=>s.rows.forEach(r=>r.forEach(c=>c.items.forEach(it=>{ITEMS[it.id]=Object.assign({},it,{wall:w.name,sec:s.name});})))));
-const EDIT=location.pathname.replace(/\/+$/,'')==='/edit';
-let qty={}, log=[], wallId=LAYOUT[0].id, query="", loaded=false, busy=0;
+const LOCS=["大門正面櫃","門簾右排置物區","層架"];
+const BASE={};
+LAYOUT.forEach((w,wi)=>w.sections.forEach(s=>s.rows.forEach(r=>r.forEach(c=>c.items.forEach(it=>{BASE[it.id]=Object.assign({},it,{wall:w.name,loc:LOCS[wi],sec:s.name});})))));
+const AMT={};
+let ITEMS={}, qty={}, deleted={}, log=[], wallId=LAYOUT[0].id, query="", listLoc="全部", loaded=false, busy=0;
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 wallId=ls.get("stock-wall")||wallId; $("#who").value=ls.get("stock-who")||"";
 $("#who").addEventListener("change",e=>ls.set("stock-who",e.target.value.trim()));
@@ -90,74 +143,105 @@ async function api(path,body){
   if(r.status===401){ls.set("stock-code","");askCode();throw new Error("通行碼不對或還沒輸入");}
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||("錯誤 "+r.status));return j;}
 function askCode(){$("#codeBox").style.display="flex";}
+function typing(){const a=document.activeElement;return a&&a.matches&&a.matches("#wall input,#list input");}
 async function refresh(){
-  if(busy)return;if(document.activeElement&&document.activeElement.matches&&document.activeElement.matches('.ctl input'))return;
-  try{const j=await api("/api/state");qty=j.qty||{};log=j.log||[];loaded=true;setStatus("已同步 "+new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));render();}
+  if(busy||typing())return;
+  try{const j=await api("/api/state");qty=j.qty||{};deleted=j.deleted||{};log=j.log||[];
+    ITEMS=Object.assign({},BASE);(j.custom||[]).forEach(c=>{ITEMS[c.id]=Object.assign({wall:LAYOUT[LOCS.indexOf(c.loc)]?.name||c.loc,sec:"新增"},c);});
+    for(const id in deleted)delete ITEMS[id];
+    loaded=true;setStatus("已同步 "+new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));render();}
   catch(e){setStatus("連線失敗："+e.message);}
 }
 function label(it){return it.name+(it.size?" "+it.size:"");}
-function stats(){const ids=Object.keys(ITEMS);$("#sQty").textContent=loaded?ids.reduce((a,id)=>a+(qty[id]||0),0):"–";$("#sItems").textContent=ids.length;$("#sZero").textContent=loaded?ids.filter(id=>(qty[id]||0)<=0).length:"–";}
+function stats(){const ids=Object.keys(ITEMS);$("#sQty").textContent=loaded?ids.reduce((a,id)=>a+(qty[id]||0),0):"–";$("#sItems").textContent=loaded?ids.length:"–";$("#sZero").textContent=loaded?ids.filter(id=>(qty[id]||0)<=0).length:"–";}
 function tabs(){const t=$("#tabs");t.innerHTML="";LAYOUT.forEach(w=>{const b=document.createElement("button");b.className="tab";b.textContent=w.name;b.setAttribute("aria-pressed",w.id===wallId);b.onclick=()=>{wallId=w.id;ls.set("stock-wall",wallId);tabs();render();};t.appendChild(b);});}
-function matches(c){if(!query)return null;const ws=query.toLowerCase().split(/\s+/).filter(Boolean);return c.items.some(it=>ws.every(w=>(it.name+" "+it.size+" "+it.note).toLowerCase().includes(w)));}
+function hitIt(it){if(!query)return null;const ws=query.toLowerCase().split(/\s+/).filter(Boolean);return ws.every(w=>(it.name+" "+it.size+" "+(it.note||"")).toLowerCase().includes(w));}
 function card(c){
-  const m=matches(c);let h="";
+  let h="";
   if(c.label)h+=`<div class="lbl">${esc(c.label)}</div>`;
-  c.items.forEach(it=>{const n=qty[it.id]||0;
-    h+=`<div class="card${loaded&&n<=0?" zero":""}${m===false?" dim":""}${m?" hit":""}"><div class="t">${esc(it.name)}${it.size?`<span class="sz">${esc(it.size)}</span>`:""}${EDIT?`<span class="unit" style="margin-left:6px;font-weight:400">${esc(it.unit)}</span>`:""}</div>${it.note?`<div class="note">${esc(it.note)}</div>`:""}`;
-    if(EDIT)h+=`<div class="ctl"><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="${esc(label(it))} 減一">−</button><input type="number" min="0" inputmode="numeric" data-id="${esc(it.id)}" value="${loaded?n:""}" aria-label="${esc(label(it))} 數量"><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="${esc(label(it))} 加一">＋</button></div>`;
-    else h+=`<div class="ctl"><span class="qv">${loaded?n:"…"}</span><span class="unit">${esc(it.unit)}</span></div>`;
-    h+=`</div>`;});
+  c.items.filter(it=>ITEMS[it.id]).forEach(it=>{const n=qty[it.id]||0,m=hitIt(it);
+    h+=`<div class="card${loaded&&n<=0?" zero":""}${m===false?" dim":""}${m?" hit":""}"><div class="t">${esc(it.name)}${it.size?`<span class="sz">${esc(it.size)}</span>`:""}</div>${it.note?`<div class="note">${esc(it.note)}</div>`:""}
+    <div class="ctl"><span class="qv">${loaded?n:"…"}</span><span class="unit">${esc(it.unit)}</span>
+    <span class="pm"><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="${esc(label(it))} 增加">＋</button><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="${esc(label(it))} 減少">−</button></span>
+    <input class="amt" type="number" min="1" inputmode="numeric" placeholder="數量" aria-label="${esc(label(it))} 加減數量" data-amt="${esc(it.id)}" value="${AMT[it.id]||""}"></div></div>`;});
   return h;
 }
 function render(){
   const w=LAYOUT.find(x=>x.id===wallId)||LAYOUT[0];
   $("#wallName").textContent=w.name;
-  const active=document.activeElement&&document.activeElement.matches&&document.activeElement.matches(".ctl input")?document.activeElement.dataset.id:null;
   let h="";
   w.sections.forEach(s=>{
     const levels=Math.max(7,s.rows.length);
     h+=`<div class="cab"><div class="nm">${esc(s.name)}</div><div class="frame">`;
     for(let i=0;i<levels;i++){const r=s.rows[i]||[];
       h+=`<div class="lv" style="grid-template-columns:repeat(${s.cols},minmax(0,1fr))">`;
-      r.forEach(c=>{h+=`<div class="slot${c.items.length>1?" multi":""}" style="grid-column:span ${c.span};grid-template-columns:repeat(${Math.min(Math.max(c.items.length,1),2)},minmax(0,1fr))">${card(c)}</div>`;});
+      r.forEach(c=>{const k=c.items.filter(it=>ITEMS[it.id]).length;h+=`<div class="slot${k>1?" multi":""}" style="grid-column:span ${c.span};grid-template-columns:repeat(${Math.min(Math.max(k,1),2)},minmax(0,1fr))">${card(c)}</div>`;});
       h+=`</div>`;}
     h+=`</div></div>`;
   });
-  $("#wall").innerHTML=h; stats(); renderLog();
-  if(active){const el=document.querySelector(`.ctl input[data-id="${active}"]`);if(el)el.focus();}
+  $("#wall").innerHTML=h; stats(); renderList(); renderLog();
 }
-function renderLog(){$("#log").innerHTML=log.length?log.map(e=>{const it=ITEMS[e.item_id];const what=it?it.wall+"・"+it.sec+"　"+label(it):e.item_id;const t=new Date(e.ts).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});return `${esc(t)}　${esc(e.who||"未署名")}　${esc(what)}　${e.d>0?"+":""}${e.d} → ${e.n}`;}).join("<br>"):"還沒有異動";}
-$("#wall").addEventListener("click",async e=>{
-  const b=e.target.closest("button[data-id]");if(!EDIT||!b||!loaded)return;
-  const id=b.dataset.id,d=Number(b.dataset.d),it=ITEMS[id];
-  if(d<0&&(qty[id]||0)<=0){setStatus(label(it)+" 已經是 0");return;}
-  const who=$("#who").value.trim();ls.set("stock-who",who);
-  qty[id]=(qty[id]||0)+d;busy++;render();setStatus("儲存中…");
-  try{const j=await api("/api/adjust",{id,d,who});qty[id]=j.n;setStatus("已儲存："+label(it)+" "+(d>0?"+1":"−1")+" → "+j.n);}
-  catch(err){qty[id]-=d;setStatus("沒存到："+err.message);}
+function renderList(){
+  const c=$("#lchips");c.innerHTML="";
+  ["全部",...LOCS].forEach(l=>{const b=document.createElement("button");b.className="chip";b.textContent=l;b.setAttribute("aria-pressed",l===listLoc);b.onclick=()=>{listLoc=l;renderList();};c.appendChild(b);});
+  const all=Object.values(ITEMS);
+  const shown=all.filter(it=>(listLoc==="全部"||it.loc===listLoc)&&hitIt(it)!==false);
+  if(!loaded){$("#list").innerHTML='<div class="msg">載入中…</div>';return;}
+  if(!shown.length){$("#list").innerHTML='<div class="msg">沒有符合的品項</div>';return;}
+  let html="";
+  LOCS.forEach(loc=>{const g=shown.filter(it=>it.loc===loc);if(!g.length)return;
+    html+=`<h3>${esc(loc)}（${g.length}）</h3>`;
+    g.forEach(it=>{const n=qty[it.id]||0;
+      html+=`<div class="row${n<=0?" zero":""}" data-id="${esc(it.id)}">
+        <div class="info"><div class="rn">${esc(it.name)}${it.size?`<span class="sz">${esc(it.size)}</span>`:""}</div>${it.note?`<div class="note">${esc(it.note)}</div>`:""}</div>
+        <div class="rq"><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="減少 ${esc(label(it))}">−</button><input type="number" min="0" inputmode="numeric" data-set="${esc(it.id)}" value="${n}" aria-label="${esc(label(it))} 數量"><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="增加 ${esc(label(it))}">＋</button><span class="unit">${esc(it.unit||"件")}</span></div>
+        <button type="button" class="del" data-del="${esc(it.id)}">刪除</button></div>`;});
+  });
+  $("#list").innerHTML=html;
+}
+function renderLog(){$("#log").innerHTML=log.length?log.map(e=>{const it=ITEMS[e.item_id]||BASE[e.item_id];const what=it?(it.wall+"・"+(it.sec||"")+"　"+label(it)):e.item_id;const t=new Date(e.ts).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});return `${esc(t)}　${esc(e.who||"未署名")}　${esc(what)}　${e.d>0?"+":""}${e.d} → ${e.n}`;}).join("<br>"):"還沒有異動";}
+function who(){const w=$("#who").value.trim();ls.set("stock-who",w);return w;}
+async function adjust(id,d){
+  const it=ITEMS[id];if(!it||!loaded)return;
+  const cur=qty[id]||0;if(d<0&&cur+d<0){setStatus(label(it)+" 只剩 "+cur+"，不能減 "+(-d));return;}
+  qty[id]=cur+d;busy++;render();setStatus("儲存中…");
+  try{const j=await api("/api/adjust",{id,d,who:who()});qty[id]=j.n;setStatus("已儲存："+label(it)+" "+(d>0?"+":"")+d+" → "+j.n);}
+  catch(err){qty[id]=cur;setStatus("沒存到："+err.message);}
   busy--;render();refresh();
-});
-$("#wall").addEventListener("change",async e=>{
-  const inp=e.target.closest(".ctl input");if(!EDIT||!inp||!loaded)return;
-  const id=inp.dataset.id,it=ITEMS[id],old=qty[id]||0,n=Math.max(0,Math.floor(Number(inp.value)||0));
-  if(n===old){inp.value=old;return;}
-  const who=$("#who").value.trim();ls.set("stock-who",who);
+}
+async function setQ(id,n){
+  const it=ITEMS[id],old=qty[id]||0;n=Math.max(0,Math.floor(Number(n)||0));if(n===old){render();return;}
   qty[id]=n;busy++;setStatus("儲存中…");
-  try{const j=await api("/api/set",{id,n,who});qty[id]=j.n;setStatus("已儲存："+label(it)+" → "+j.n);}
+  try{const j=await api("/api/set",{id,n,who:who()});qty[id]=j.n;setStatus("已儲存："+label(it)+" → "+j.n);}
   catch(err){qty[id]=old;setStatus("沒存到："+err.message);}
   busy--;render();refresh();
+}
+$("#wall").addEventListener("click",e=>{const b=e.target.closest("button[data-id]");if(!b)return;
+  const id=b.dataset.id,inp=document.querySelector(`input[data-amt="${id}"]`);const a=Math.max(1,Math.floor(Number(inp&&inp.value)||1));
+  adjust(id,Number(b.dataset.d)*a);});
+$("#wall").addEventListener("input",e=>{if(e.target.matches("input.amt"))AMT[e.target.dataset.amt]=e.target.value;});
+$("#wall").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("input.amt")){e.preventDefault();e.target.blur();}});
+$("#list").addEventListener("click",async e=>{
+  const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.id){adjust(b.dataset.id,Number(b.dataset.d));return;}
+  if(b.dataset.del){const id=b.dataset.del;
+    if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="確定刪除？";setTimeout(()=>{b.classList.remove("arm");b.textContent="刪除";},3000);return;}
+    busy++;try{await api("/api/delete",{id,who:who()});setStatus("已刪除："+label(ITEMS[id]));}catch(err){setStatus("刪除失敗："+err.message);}busy--;refresh();}
 });
+$("#list").addEventListener("change",e=>{if(e.target.matches("input[data-set]"))setQ(e.target.dataset.set,e.target.value);});
 $("#q").addEventListener("input",e=>{query=e.target.value.trim();
-  if(query){const hit=LAYOUT.find(w=>w.sections.some(s=>s.rows.some(r=>r.some(c=>matches(c)))));if(hit&&hit.id!==wallId){wallId=hit.id;tabs();}}
+  if(query){const hit=LAYOUT.find(w=>w.sections.some(s=>s.rows.some(r=>r.some(c=>c.items.some(it=>ITEMS[it.id]&&hitIt(it))))));if(hit&&hit.id!==wallId){wallId=hit.id;tabs();}}
   render();});
+$("#addForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);
+  const d={name:f.get("name").trim(),size:f.get("size").trim(),qty:Math.max(0,Number(f.get("qty"))||0),unit:f.get("unit").trim()||"件",loc:f.get("loc"),note:f.get("note").trim(),who:who()};
+  if(!d.name)return;busy++;try{await api("/api/add",d);e.target.reset();setStatus("已新增："+d.name);}catch(err){setStatus("新增失敗："+err.message);}busy--;refresh();});
+$("#locSel").innerHTML=LOCS.map(l=>`<option>${esc(l)}</option>`).join("");
 $("#codeForm").addEventListener("submit",async e=>{e.preventDefault();ls.set("stock-code",$("#codeIn").value.trim());
-  try{await api("/api/check",{});$("#codeBox").style.display="none";$("#codeMsg").textContent="";setStatus("通行碼正確，可以修改");}
+  try{await api("/api/check",{});$("#codeBox").style.display="none";$("#codeMsg").textContent="";setStatus("通行碼正確");}
   catch(err){$("#codeMsg").textContent=err.message;askCode();}});
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();}
 $("#expCsv").onclick=()=>{const rows=[["櫃面","區","品名","尺寸","數量","單位","備註"],...Object.values(ITEMS).map(it=>[it.wall,it.sec,it.name,it.size,qty[it.id]||0,it.unit,it.note])];dl("制服庫存_"+new Date().toISOString().slice(0,10)+".csv","﻿"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n"),"text/csv");};
-if(!EDIT){document.title="制服倉庫存量（查看）";$("#who").parentElement.querySelector('label[for=who]').remove();$("#who").remove();$("#modeTag").textContent="查看版・自動更新，不能修改";}
-else{document.title="制服倉庫存量（管理）";$("#modeTag").textContent="管理版";}
-tabs();render();refresh();
+ITEMS=Object.assign({},BASE);tabs();render();refresh();
 setInterval(()=>{if(document.visibilityState==="visible")refresh();},10000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh();});
 </script>
