@@ -1,4 +1,5 @@
 name: 打包整合版 APK
+# 簽章金鑰與密碼由 GitHub Secrets（KEYSTORE_B64、KEYSTORE_PASSWORD）提供
 
 on:
   push:
