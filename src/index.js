@@ -3,12 +3,14 @@
 //   /admin       整合後台          ← clockin.js
 //   /hr/         人事掃描建檔      ← hr/index.js（複製自 hr-scan，API 加上 /hr 前綴）
 //   /pay         薪資查詢          ← 服務綁定 PAY（薪資系統原本的 Worker，原樣轉送）
+//   /stock       制服倉庫庫存管理  ← stock/index.html（資料存在各自瀏覽器）
 // 資料庫共用：DB = clockin-db（打卡）、HR = hr-scan-db（人事建檔）。三個舊系統照常運作、互不影響。
 
 import clockin from './clockin.js';
 import hr from './hr/index.js';
 import HR_PAGE from './hr/page.html';
 import HR_ICON from './hr/icon.svg';
+import STOCK_PAGE from './stock/index.html';
 
 const PAY_FALLBACK = 'https://honyingsecurity.aa22156921.workers.dev/';
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
@@ -59,6 +61,10 @@ export default {
 
     // 薪資查詢
     if (p === '/pay' || p === '/pay/') return pay(req, env);
+
+    // 制服倉庫庫存管理
+    if (p === '/stock/') return Response.redirect(url.origin + '/stock', 302);
+    if (p === '/stock') return html(STOCK_PAGE);
 
     // 其他全部是打卡（員工頁、後台、App API）
     return clockin.fetch(req, env, ctx);

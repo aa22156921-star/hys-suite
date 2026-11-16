@@ -7,6 +7,7 @@
 | `/` | 員工打卡、補卡、請假、查薪資單 | `clockin/`（打卡原始碼的副本，之後在這裡改） |
 | `/admin` | 整合後台（打卡、排班、核准、人事名冊），上方連到人事建檔、薪資查詢 | `clockin/` |
 | `/hr/` | 人事掃描建檔 | `src/hr/`（複製自 hr-scan，API 改走 `/hr/api/`） |
+| `/stock` | 制服倉庫庫存管理（加減數量、匯出 CSV；資料存在各自瀏覽器） | `src/stock/index.html` |
 | `/pay` | 薪資查詢 | 服務綁定 `PAY` → 原本的薪資 Worker `honyingsecurity`，每月更新照舊 |
 
 資料庫和舊系統共用（`DB` = clockin-db、`HR` = hr-scan-db），不會分成兩份。
