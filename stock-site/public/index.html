@@ -47,12 +47,12 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
 </head>
 <body>
 <header>
-  <h1>制服倉庫存量</h1>
+  <h1>制服倉庫存量 <small id="modeTag" style="font-size:13px;font-weight:400"></small></h1>
   <div class="stats"><span>總數量 <b id="sQty">–</b></span><span>品項 <b id="sItems">–</b></span><span>缺貨 <b id="sZero">–</b></span><span class="st" id="status"></span></div>
   <div class="bar" id="tabs"></div>
   <div class="bar"><label for="who" style="font-size:14px">操作人</label><input id="who" class="search" style="flex:0 1 140px" placeholder="你的名字"><label for="q" style="position:absolute;left:-9999px">搜尋</label><input id="q" class="search" type="search" placeholder="搜尋品名或尺寸，例如：保全外套 XL"></div>
 </header>
-<div id="codeBox" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.96);z-index:9;align-items:center;justify-content:center"><form id="codeForm" style="border:1px solid #000;padding:20px;background:#fff;display:flex;flex-direction:column;gap:10px;min-width:260px"><label for="codeIn"><b>請輸入通行碼</b></label><input id="codeIn" class="search" autocomplete="off"><button class="tab" type="submit">確定</button></form></div>
+<div id="codeBox" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.96);z-index:9;align-items:center;justify-content:center"><form id="codeForm" style="border:1px solid #000;padding:20px;background:#fff;display:flex;flex-direction:column;gap:10px;min-width:260px"><label for="codeIn"><b>請輸入通行碼</b></label><input id="codeIn" class="search" autocomplete="off"><span id="codeMsg" style="font-size:13px"></span><button class="tab" type="submit">確定</button><a href="/" style="font-size:13px;color:#000">只要查看，回查看版</a></form></div>
 <main>
   <h2 id="wallName"></h2>
   <div class="wall" id="wall"></div>
@@ -62,7 +62,7 @@ summary{cursor:pointer;font-weight:700;min-height:28px}
   </details>
   <details>
     <summary>匯出</summary>
-    <p class="note">所有同仁看到的是同一份數量，每次按 −1 / +1 都會記錄在「最近異動」。</p>
+    <p class="note">所有人看到的是同一份數量。修改請到管理版（網址後面加 /edit，需要通行碼）。</p>
     <div class="tools"><button type="button" class="tab" id="expCsv">匯出 Excel (CSV)</button></div>
   </details>
 </main>
@@ -72,6 +72,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ITEMS={};
 LAYOUT.forEach(w=>w.sections.forEach(s=>s.rows.forEach(r=>r.forEach(c=>c.items.forEach(it=>{ITEMS[it.id]=Object.assign({},it,{wall:w.name,sec:s.name});})))));
+const EDIT=location.pathname.replace(/\/+$/,'')==='/edit';
 let qty={}, log=[], wallId=LAYOUT[0].id, query="", loaded=false, busy=0;
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 wallId=ls.get("stock-wall")||wallId; $("#who").value=ls.get("stock-who")||"";
@@ -80,7 +81,7 @@ function code(){return ls.get("stock-code")||"";}
 function setStatus(t){$("#status").textContent=t;}
 async function api(path,body){
   const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Code":encodeURIComponent(code())},body:body?JSON.stringify(body):undefined,cache:"no-store"});
-  if(r.status===401){askCode();throw new Error("需要通行碼");}
+  if(r.status===401){ls.set("stock-code","");askCode();throw new Error("通行碼不對或還沒輸入");}
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||("錯誤 "+r.status));return j;}
 function askCode(){$("#codeBox").style.display="flex";}
 async function refresh(){
@@ -104,7 +105,7 @@ function render(){
       if(c.label)h+=`<div class="lbl">${esc(c.label)}</div>`;
       c.items.forEach(it=>{const n=qty[it.id]||0;
         h+=`<div class="it${loaded&&n<=0?" zero":""}"><div class="t">${esc(it.name)}${it.size?`<span class="sz">${esc(it.size)}</span>`:""}</div>${it.note?`<div class="note">${esc(it.note)}</div>`:""}
-        <div class="ctl"><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="${esc(label(it))} 減一">−1</button><span class="q">${loaded?n:"…"}<small>${esc(it.unit)}</small></span><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="${esc(label(it))} 加一">+1</button></div></div>`;});
+        <div class="ctl">${EDIT?`<button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="${esc(label(it))} 減一">−1</button>`:""}<span class="q"${EDIT?"":' style="text-align:left"'}>${loaded?n:"…"}<small>${esc(it.unit)}</small></span>${EDIT?`<button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="${esc(label(it))} 加一">+1</button>`:""}</div></div>`;});
       h+=`</div>`;}));
     h+=`</div></div>`;
   });
@@ -112,7 +113,7 @@ function render(){
 }
 function renderLog(){$("#log").innerHTML=log.length?log.map(e=>{const it=ITEMS[e.item_id];const what=it?it.wall+"・"+it.sec+"　"+label(it):e.item_id;const t=new Date(e.ts).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});return `${esc(t)}　${esc(e.who||"未署名")}　${esc(what)}　${e.d>0?"+":""}${e.d} → ${e.n}`;}).join("<br>"):"還沒有異動";}
 $("#wall").addEventListener("click",async e=>{
-  const b=e.target.closest("button[data-id]");if(!b||!loaded)return;
+  const b=e.target.closest("button[data-id]");if(!EDIT||!b||!loaded)return;
   const id=b.dataset.id,d=Number(b.dataset.d),it=ITEMS[id];
   if(d<0&&(qty[id]||0)<=0){setStatus(label(it)+" 已經是 0");return;}
   const who=$("#who").value.trim();ls.set("stock-who",who);
@@ -124,9 +125,13 @@ $("#wall").addEventListener("click",async e=>{
 $("#q").addEventListener("input",e=>{query=e.target.value.trim();
   if(query){const hit=LAYOUT.find(w=>w.sections.some(s=>s.rows.some(r=>r.some(c=>matches(c)))));if(hit&&hit.id!==wallId){wallId=hit.id;tabs();}}
   render();});
-$("#codeForm").addEventListener("submit",e=>{e.preventDefault();ls.set("stock-code",$("#codeIn").value.trim());$("#codeBox").style.display="none";refresh();});
+$("#codeForm").addEventListener("submit",async e=>{e.preventDefault();ls.set("stock-code",$("#codeIn").value.trim());
+  try{await api("/api/check",{});$("#codeBox").style.display="none";$("#codeMsg").textContent="";setStatus("通行碼正確，可以修改");}
+  catch(err){$("#codeMsg").textContent=err.message;askCode();}});
 function dl(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();}
 $("#expCsv").onclick=()=>{const rows=[["櫃面","區","品名","尺寸","數量","單位","備註"],...Object.values(ITEMS).map(it=>[it.wall,it.sec,it.name,it.size,qty[it.id]||0,it.unit,it.note])];dl("制服庫存_"+new Date().toISOString().slice(0,10)+".csv","﻿"+rows.map(r=>r.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n"),"text/csv");};
+if(!EDIT){document.title="制服倉庫存量（查看）";$("#who").parentElement.querySelector('label[for=who]').remove();$("#who").remove();$("#modeTag").textContent="查看版・自動更新，不能修改";}
+else{document.title="制服倉庫存量（管理）";$("#modeTag").textContent="管理版";if(!code())askCode();}
 tabs();render();refresh();
 setInterval(()=>{if(document.visibilityState==="visible")refresh();},10000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh();});

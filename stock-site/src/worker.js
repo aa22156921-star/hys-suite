@@ -1,17 +1,22 @@
 // 制服倉庫庫存管理：靜態頁在 public/，這裡只處理 /api/*
 // 資料庫 DB = uniform-stock-db（items：每格每品項的數量；log：每次加減紀錄）
-// 若設定了祕密 STOCK_CODE，所有 API 都要帶通行碼（標頭 X-Code）
+// 查看（GET）不用通行碼；修改（POST）要帶通行碼（標頭 X-Code），通行碼是祕密 STOCK_CODE，沒設就一律不能改
+// /edit = 管理版（同一個頁面，顯示加減按鈕）
 const J = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), p = url.pathname;
+    if (p === '/edit' || p === '/edit/') return env.ASSETS.fetch(new Request(url.origin + '/', req));
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(req);
 
-    if (env.STOCK_CODE) {
+    if (req.method === 'POST') {
+      if (!env.STOCK_CODE) return J({ error: '管理員還沒設定通行碼（STOCK_CODE），暫時不能修改' }, 503);
       const c = decodeURIComponent(req.headers.get('X-Code') || '');
       if (c !== env.STOCK_CODE) return J({ error: '通行碼不對' }, 401);
     }
+
+    if (p === '/api/check' && req.method === 'POST') return J({ ok: true });
 
     if (p === '/api/state' && req.method === 'GET') {
       const items = await env.DB.prepare('SELECT id, qty FROM items').all();
