@@ -97,11 +97,14 @@ h3{font-size:15px;color:#5f5f5f;margin:20px 0 8px;font-weight:600}
 .wh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}.wh h2{margin:0}
 body.nocab #cabArea,body.nocab #wallName,body.nocab #tabs{display:none}
 @media(min-width:1151px){body.nocab main{grid-template-columns:minmax(0,820px) minmax(0,1fr)}body.nocab .listwrap{position:static;max-height:none}}
+body.ro .pm,body.ro input.amt,body.ro .rq button,body.ro .del,body.ro #addBox,body.ro label[for=who],body.ro #who{display:none}
+body.ro .rq input{border-color:transparent;background:transparent;pointer-events:none}
+body.ro .ro-tag{display:inline}.ro-tag{display:none;font-size:13px;font-weight:400;color:#5f5f5f;margin-left:6px}
 </style>
 </head>
 <body class="nocab">
 <header>
-  <h1>制服倉庫存量</h1>
+  <h1>制服倉庫存量<span class="ro-tag">（查看用，不能修改）</span></h1>
   <div class="stats"><span>總數量 <b id="sQty">–</b></span><span>品項 <b id="sItems">–</b></span><span>缺貨 <b id="sZero">–</b></span><span class="st" id="status"></span></div>
   <div class="bar" id="tabs"></div>
   <div class="bar"><label for="who" style="font-size:14px">操作人</label><input id="who" class="search" style="flex:0 1 140px" placeholder="你的名字"><label for="q" style="position:absolute;left:-9999px">搜尋</label><input id="q" class="search" type="search" placeholder="搜尋品名或尺寸，例如：保全外套 XL"></div>
@@ -151,6 +154,8 @@ const LOCS=["大門正面櫃","門簾右排置物區","層架"];
 const BASE={};
 LAYOUT.forEach((w,wi)=>w.sections.forEach(s=>s.rows.forEach(r=>r.forEach(c=>c.items.forEach(it=>{BASE[it.id]=Object.assign({},it,{wall:w.name,loc:LOCS[wi],sec:s.name});})))));
 const AMT={};
+const RO=location.pathname.replace(/\/+$/,'')==='/view';
+if(RO)document.body.classList.add('ro');
 let ITEMS={}, qty={}, deleted={}, log=[], wallId=LAYOUT[0].id, query="", listLoc="全部", loaded=false, busy=0;
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 wallId=ls.get("stock-wall")||wallId; $("#who").value=ls.get("stock-who")||"";
@@ -216,7 +221,7 @@ function renderList(){
     g.forEach(it=>{const n=qty[it.id]||0;
       html+=`<div class="row${n<=0?" zero":""}" data-id="${esc(it.id)}">
         <div class="info"><div class="rn">${esc(it.name)}${it.size?`<span class="sz">${esc(it.size)}</span>`:""}</div>${it.note?`<div class="note">${esc(it.note)}</div>`:""}</div>
-        <div class="rq"><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="減少 ${esc(label(it))}">−</button><input type="text" inputmode="text" autocomplete="off" data-set="${esc(it.id)}" value="${n}" aria-label="${esc(label(it))} 數量"><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="增加 ${esc(label(it))}">＋</button><span class="unit">${esc(it.unit||"件")}</span></div>
+        <div class="rq"><button type="button" data-id="${esc(it.id)}" data-d="-1" aria-label="減少 ${esc(label(it))}">−</button><input type="text" inputmode="text" autocomplete="off" ${RO?"readonly tabindex=\"-1\"":""} data-set="${esc(it.id)}" value="${n}" aria-label="${esc(label(it))} 數量"><button type="button" data-id="${esc(it.id)}" data-d="1" aria-label="增加 ${esc(label(it))}">＋</button><span class="unit">${esc(it.unit||"件")}</span></div>
         <button type="button" class="del" data-del="${esc(it.id)}">刪除</button></div>`;});
   });
   $("#list").innerHTML=html;
@@ -225,7 +230,7 @@ function renderLog(){$("#log").innerHTML=log.length?log.map(e=>{const it=ITEMS[e
 function parseQ(v){v=String(v||"").trim().replace(/＋/g,"+").replace(/[－−—]/g,"-").replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/\s+/g,"");
   if(/^[+-]\d+$/.test(v))return {d:Number(v)};if(/^\d+$/.test(v))return {n:Number(v)};return v?{bad:true}:{};}
 function who(){const w=$("#who").value.trim();ls.set("stock-who",w);return w;}
-async function adjust(id,d){
+async function adjust(id,d){if(RO)return;
   const it=ITEMS[id];if(!it||!loaded)return;
   const cur=qty[id]||0;if(d<0&&cur+d<0){setStatus(label(it)+" 只剩 "+cur+"，不能減 "+(-d));return;}
   qty[id]=cur+d;busy++;render();setStatus("儲存中…");
@@ -233,7 +238,7 @@ async function adjust(id,d){
   catch(err){qty[id]=cur;setStatus("沒存到："+err.message);}
   busy--;render();refresh();
 }
-async function setQ(id,n){
+async function setQ(id,n){if(RO)return;
   const it=ITEMS[id],old=qty[id]||0;n=Math.max(0,Math.floor(Number(n)||0));if(n===old){render();return;}
   qty[id]=n;busy++;setStatus("儲存中…");
   try{const j=await api("/api/set",{id,n,who:who()});qty[id]=j.n;setStatus("已儲存："+label(it)+" → "+j.n);}
@@ -248,7 +253,7 @@ function applyAmt(inp){const id=inp.dataset.amt,p=parseQ(inp.value);
 $("#wall").addEventListener("input",e=>{if(e.target.matches("input.amt"))AMT[e.target.dataset.amt]=e.target.value;});
 $("#wall").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("input.amt")){e.preventDefault();applyAmt(e.target);}});
 $("#wall").addEventListener("change",e=>{if(e.target.matches("input.amt"))applyAmt(e.target);});
-$("#list").addEventListener("click",async e=>{
+$("#list").addEventListener("click",async e=>{if(RO)return;
   const b=e.target.closest("button");if(!b)return;
   if(b.dataset.id){adjust(b.dataset.id,Number(b.dataset.d));return;}
   if(b.dataset.del){const id=b.dataset.del;
@@ -262,7 +267,7 @@ $("#list").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("
 $("#q").addEventListener("input",e=>{query=e.target.value.trim();
   if(query){const hit=LAYOUT.find(w=>w.sections.some(s=>s.rows.some(r=>r.some(c=>c.items.some(it=>ITEMS[it.id]&&hitIt(it))))));if(hit&&hit.id!==wallId){wallId=hit.id;tabs();}}
   render();});
-$("#addForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);
+$("#addForm").addEventListener("submit",async e=>{e.preventDefault();if(RO)return;const f=new FormData(e.target);
   const d={name:f.get("name").trim(),size:f.get("size").trim(),qty:Math.max(0,Number(f.get("qty"))||0),unit:f.get("unit").trim()||"件",loc:f.get("loc"),note:f.get("note").trim(),who:who()};
   if(!d.name)return;busy++;try{await api("/api/add",d);e.target.reset();setStatus("已新增："+d.name);}catch(err){setStatus("新增失敗："+err.message);}busy--;refresh();});
 $("#locSel").innerHTML=LOCS.map(l=>`<option>${esc(l)}</option>`).join("");

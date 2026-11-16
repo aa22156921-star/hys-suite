@@ -4,7 +4,7 @@
 //          extra = 動態表新增品項的 JSON（name/size/unit/loc/note），這類 id 以 c- 開頭
 //   log：每次加減紀錄
 // 查看、修改都不用通行碼；之後若設定祕密 STOCK_CODE，修改（POST）就要帶通行碼（標頭 X-Code）
-// /edit 跟 / 是同一頁（舊網址保留）
+// /edit 跟 / 是同一頁（舊網址保留）；/view 是同一頁的唯讀模式（只藏起修改按鈕，不是權限控管）
 const J = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 const ID_RE = /^(w\d-\d+-\d+-\d+-\d+|c-[a-z0-9]{6,20})$/;
 const LOCS = ['大門正面櫃', '門簾右排置物區', '層架'];
@@ -18,7 +18,7 @@ async function addLog(env, now, id, d, n, who) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), p = url.pathname;
-    if (p === '/edit' || p === '/edit/') return env.ASSETS.fetch(new Request(url.origin + '/', req));
+    if (['/edit', '/edit/', '/view', '/view/'].includes(p)) return env.ASSETS.fetch(new Request(url.origin + '/', req));
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(req);
 
     if (req.method === 'POST' && env.STOCK_CODE) {
