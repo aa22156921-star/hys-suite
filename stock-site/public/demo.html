@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>制服倉庫存量（示範版）</title>
+<link rel="manifest" href="/demo.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="/demo-apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/demo-icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="庫存示範">
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#fff;color:#1a1a1a;font-family:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px}
@@ -281,6 +288,7 @@ $("#toggleCab").onclick=()=>setCab(!document.body.classList.contains("nocab"));
 ITEMS=Object.assign({},BASE);tabs();hh();render();setCab(ls.get("demo-cab")!=="1");refresh();
 setInterval(()=>{if(document.visibilityState==="visible")refresh();},10000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh();});
+if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 </script>
 </body>
 </html>
